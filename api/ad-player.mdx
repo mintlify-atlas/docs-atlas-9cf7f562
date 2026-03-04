@@ -1,0 +1,108 @@
+---
+title: 'AdPlayer'
+description: 'Core video ad player class (alias: AdgentSDK)'
+icon: 'play-circle'
+---
+
+<Note>
+`AdPlayer` and `AdgentSDK` are the same class. `AdgentSDK` is exported as an alias for convenience. Most users should use `AdgentSDK` as the primary import.
+</Note>
+
+## Quick Reference
+
+The `AdPlayer` class provides fault-tolerant video ad playback for Smart TV platforms with:
+
+- Nuclear Mute strategy for autoplay compatibility
+- Soft-fail autoplay with interactive overlays
+- Remote control key handling
+- Automatic VAST parsing and tracking
+
+## Import
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+// or
+import { AdgentSDK } from 'adgent-sdk';
+```
+
+Both imports reference the same class. The `AdgentSDK` name is recommended for clarity.
+
+## Usage
+
+See the [AdgentSDK documentation](/api/adgent-sdk) for complete API reference, constructor parameters, methods, and examples.
+
+## Example
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  onComplete: () => console.log('Ad finished')
+});
+
+await player.init();
+```
+
+## Implementation Details
+
+Located in: `src/core/AdPlayer.ts:38`
+
+### Nuclear Mute Strategy
+
+The player applies the following attributes to the video element for maximum TV compatibility:
+
+```typescript
+{
+  muted: true,
+  playsinline: true,
+  autoplay: true,
+  'webkit-playsinline': true
+}
+```
+
+See `src/core/AdPlayer.ts:173` for the complete video element creation logic.
+
+### Autoplay Fallback
+
+When `video.play()` fails (common on some TV platforms), the player:
+
+1. Catches the rejection (src/core/AdPlayer.ts:276)
+2. Shows an interactive overlay with a play button (src/core/AdPlayer.ts:287)
+3. Waits for user interaction to start playback
+
+This prevents crashes and provides a graceful degradation path.
+
+### Key Handling
+
+The player captures remote control keys and normalizes them using [PlatformAdapter](/api/platform-adapter):
+
+- **Enter**: Start ad (if waiting) or skip (if available)
+- **Back**: Close or skip ad
+- **Play/Pause**: Control playback
+
+See `src/core/AdPlayer.ts:687` for the key action handler.
+
+## Constructor
+
+See [AdgentSDK Constructor](/api/adgent-sdk#constructor)
+
+## Methods
+
+| Method | Description | Reference |
+|--------|-------------|----------|
+| `init()` | Initialize SDK and fetch VAST | [AdgentSDK.init()](/api/adgent-sdk#init) |
+| `skip()` | Skip the ad | [AdgentSDK.skip()](/api/adgent-sdk#skip) |
+| `mute()` | Mute video | [AdgentSDK.mute()](/api/adgent-sdk#mute) |
+| `unmute()` | Unmute video | [AdgentSDK.unmute()](/api/adgent-sdk#unmute) |
+| `on(listener)` | Add event listener | [AdgentSDK.on()](/api/adgent-sdk#on) |
+| `getState()` | Get current state | [AdgentSDK.getState()](/api/adgent-sdk#getstate) |
+| `destroy()` | Clean up resources | [AdgentSDK.destroy()](/api/adgent-sdk#destroy) |
+
+## See Also
+
+- [AdgentSDK](/api/adgent-sdk) - Full API documentation
+- [VASTParser](/api/vast-parser) - VAST XML parsing
+- [AdTracker](/api/ad-tracker) - Tracking pixel firing
+- [PlatformAdapter](/api/platform-adapter) - Platform detection

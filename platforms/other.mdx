@@ -1,0 +1,373 @@
+---
+title: 'Other Platforms'
+description: 'Support for additional Smart TV platforms and generic web environments'
+---
+
+## Overview
+
+In addition to the primary Smart TV platforms (WebOS, Tizen, Vidaa, WhaleOS), the Adgent SDK supports several other streaming devices and a generic web fallback for maximum compatibility.
+
+## Supported Platforms
+
+The SDK provides native adapters for the following platforms:
+
+| Platform | Detection | Status |
+|----------|-----------|--------|
+| **Generic Web** | Fallback for unknown platforms | ✅ Fully Supported |
+| **Fire TV** | Amazon Fire TV devices | ✅ Supported |
+| **Roku** | Roku streaming devices | ✅ Supported |
+| **Xbox** | Xbox gaming consoles | ✅ Supported |
+| **PlayStation** | PlayStation gaming consoles | ✅ Supported |
+| **Android TV** | Google TV / Android TV | ✅ Supported |
+| **Vizio** | Vizio SmartCast TVs | ✅ Supported |
+
+## Platform Detection
+
+### Generic Web
+
+The Generic platform is used as a fallback when no specific Smart TV platform is detected:
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.Generic) {
+  console.log('Running on generic web platform');
+  console.log('Browser:', navigator.userAgent);
+}
+```
+
+### Fire TV
+
+Detection patterns for Amazon Fire TV:
+- `/AFT/i` - Amazon Fire TV
+- `/AFTS/i` - Fire TV Stick
+- `/AFTM/i` - Fire TV specific models
+- `/Amazon.*Fire/i`
+
+### Roku
+
+Detection pattern:
+- `/Roku/i`
+
+### Xbox
+
+Detection patterns:
+- `/Xbox/i`
+- `/Edge.*Xbox/i`
+
+### PlayStation
+
+Detection patterns:
+- `/PlayStation/i`
+- `/PS4/i`
+- `/PS5/i`
+
+### Android TV
+
+Detection patterns:
+- `/Android.*TV/i`
+- `/Chromecast/i`
+- `/BRAVIA/i` - Sony TVs
+- `/SHIELD/i` - NVIDIA Shield
+
+### Vizio
+
+Detection patterns:
+- `/VIZIO/i`
+- `/SmartCast/i`
+
+## Remote Control Key Codes
+
+### Generic Web
+
+Generic platform uses standard keyboard mappings:
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | Enter key |
+| Back | 27 | Escape key |
+| Back | 8 | Backspace (alternate) |
+| Left | 37 | Arrow left |
+| Up | 38 | Arrow up |
+| Right | 39 | Arrow right |
+| Down | 40 | Arrow down |
+| PlayPause | 32 | Spacebar |
+| Play | 80 | P key |
+| Stop | 83 | S key |
+| Mute | 77 | M key |
+
+### Fire TV & Android TV
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK/Select |
+| Back | 4 | Android back button |
+| Back | 27 | Escape (alternate) |
+| Left | 37 | D-pad left |
+| Up | 38 | D-pad up |
+| Right | 39 | D-pad right |
+| Down | 40 | D-pad down |
+| PlayPause | 85 | Play/Pause toggle |
+| Play | 126 | Play |
+| Pause | 127 | Pause |
+| Rewind | 89 | Rewind |
+| Fast Forward | 90 | Fast forward |
+| Menu | 82 | Menu button |
+
+### Roku
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK |
+| Back | 27 | Back |
+| Back | 8 | Backspace (alternate) |
+| Left | 37 | Left |
+| Up | 38 | Up |
+| Right | 39 | Right |
+| Down | 40 | Down |
+| PlayPause | 179 | Play/Pause |
+| Stop | 178 | Stop |
+| Fast Forward | 228 | Fast forward |
+| Rewind | 227 | Rewind |
+
+### Xbox
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | A button |
+| Back | 27 | B button |
+| Left | 37 | D-pad left |
+| Up | 38 | D-pad up |
+| Right | 39 | D-pad right |
+| Down | 40 | D-pad down |
+| Menu | 195 | Menu button |
+| Menu | 196 | View button |
+
+### PlayStation
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | X button (Cross) |
+| Back | 27 | Circle button |
+| Left | 37 | D-pad left |
+| Up | 38 | D-pad up |
+| Right | 39 | D-pad right |
+| Down | 40 | D-pad down |
+
+### Vizio
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK |
+| Back | 27 | Back |
+| Back | 8 | Backspace (alternate) |
+| Left | 37 | Left |
+| Up | 38 | Up |
+| Right | 39 | Right |
+| Down | 40 | Down |
+| Play | 415 | Play |
+| Pause | 19 | Pause |
+
+## Platform Capabilities
+
+### Fire TV
+
+```typescript
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.FireTV) {
+  console.log('HDR:', adapter.capabilities.hdr); // true
+  console.log('HDR10+:', adapter.capabilities.hdr10Plus); // true
+  console.log('Dolby Vision:', adapter.capabilities.dolbyVision); // true
+  console.log('HEVC:', adapter.capabilities.hevc); // true
+  console.log('Voice:', adapter.capabilities.voice); // true (Alexa)
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 10000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'hevc'
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+### Roku
+
+```typescript
+if (adapter.platform === Platform.Roku) {
+  console.log('HDR:', adapter.capabilities.hdr); // true
+  console.log('Dolby Vision:', adapter.capabilities.dolbyVision); // true
+  console.log('HEVC:', adapter.capabilities.hevc); // true (variable)
+  console.log('Voice:', adapter.capabilities.voice); // true
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 8000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'h264' (safer)
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+### Xbox
+
+```typescript
+if (adapter.platform === Platform.Xbox) {
+  console.log('HDR:', adapter.capabilities.hdr); // true
+  console.log('Dolby Vision:', adapter.capabilities.dolbyVision); // true
+  console.log('Dolby Atmos:', adapter.capabilities.dolbyAtmos); // true
+  console.log('HEVC:', adapter.capabilities.hevc); // true
+  console.log('AV1:', adapter.capabilities.av1); // true
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 20000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'hevc'
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+### PlayStation
+
+```typescript
+if (adapter.platform === Platform.PlayStation) {
+  console.log('HDR:', adapter.capabilities.hdr); // true
+  console.log('HEVC:', adapter.capabilities.hevc); // true
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 20000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'hevc'
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+### Android TV
+
+```typescript
+if (adapter.platform === Platform.AndroidTV) {
+  console.log('HDR:', adapter.capabilities.hdr); // true
+  console.log('Dolby Vision:', adapter.capabilities.dolbyVision); // true
+  console.log('HEVC:', adapter.capabilities.hevc); // true
+  console.log('VP9:', adapter.capabilities.vp9); // true
+  console.log('Voice:', adapter.capabilities.voice); // true (Google Assistant)
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 5000 kbps (default)
+  console.log('Preferred codec:', settings.preferredCodec); // 'h264'
+  console.log('Max resolution:', settings.maxResolution); // '1080p'
+}
+```
+
+### Generic Web
+
+```typescript
+if (adapter.platform === Platform.Generic) {
+  // Base capabilities only
+  console.log('Fullscreen:', adapter.capabilities.fullscreen);
+  console.log('Touch:', adapter.capabilities.touch);
+  
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 5000 kbps (safe default)
+  console.log('Preferred codec:', settings.preferredCodec); // 'h264'
+  console.log('Max resolution:', settings.maxResolution); // '1080p'
+}
+```
+
+## Code Example
+
+Universal implementation that works across all platforms:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+// Detect platform and configure accordingly
+const adapter = getPlatformAdapter();
+const settings = adapter.getRecommendedVideoSettings();
+
+console.log('Detected platform:', adapter.platform);
+console.log('Recommended settings:', settings);
+
+// Configure SDK with platform-optimized settings
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: settings.maxBitrate,
+  mutedAutoplay: true,
+  onStart: () => console.log('Ad started'),
+  onComplete: () => console.log('Ad completed'),
+  onError: (error) => console.error('Ad error:', error)
+});
+
+// Universal key handling
+document.addEventListener('keydown', async (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Back:
+      await sdk.stop();
+      break;
+      
+    case KeyAction.PlayPause:
+      const state = sdk.getState();
+      if (state.paused) {
+        await sdk.resume();
+      } else {
+        await sdk.pause();
+      }
+      break;
+      
+    case KeyAction.Enter:
+      await sdk.skip();
+      break;
+  }
+});
+
+await sdk.init();
+await sdk.play();
+```
+
+## Known Limitations
+
+### Roku Limitations
+
+- **HEVC Support**: Variable HEVC support across Roku models
+- **Preferred Codec**: Use H.264 for maximum compatibility
+- **Web App Constraints**: Roku's web app environment has limited capabilities
+
+### Gaming Console Limitations (Xbox/PlayStation)
+
+- **Browser-Based Only**: These platforms are detected when running in Edge/browser
+- **Native Apps**: SDK does not support native console apps
+- **Controller Input**: Button mappings may vary by browser
+
+### Android TV Limitations
+
+- **Fragmentation**: Wide variety of hardware and Android versions
+- **Variable Performance**: Performance varies significantly by manufacturer
+- **Back Button**: Android back button (keyCode 4) must be handled
+
+### Vizio Limitations
+
+- **SmartCast**: Limited API access compared to other platforms
+- **Basic Features**: Fewer advanced capabilities exposed to web apps
+
+### Generic Web Limitations
+
+- **Unknown Hardware**: Cannot optimize for specific device capabilities
+- **Conservative Settings**: Uses safe default settings (lower bitrate, H.264)
+- **Keyboard Only**: Assumes standard keyboard input
+- **No Platform APIs**: Cannot access platform-specific features
+
+## Best Practices
+
+1. **Adaptive Configuration**: Use `getRecommendedVideoSettings()` for platform-specific optimization
+2. **Codec Fallbacks**: Always provide H.264 fallback for maximum compatibility
+3. **Key Normalization**: Use `normalizeKeyCode()` instead of hardcoding key values
+4. **Graceful Degradation**: Test on generic platform to ensure baseline functionality
+5. **Platform Detection**: Check platform before using platform-specific features
+6. **Conservative Bitrates**: When in doubt, use lower bitrates for stability
+7. **Error Handling**: Implement robust error handling for unknown platforms
+
+## See Also
+
+- [Platform Detection](/core/platform-adapter)
+- [Key Code Normalization](/guides/remote-control)
+- [Video Capabilities](/guides/video-optimization)
+- [Codec Support](/guides/codec-support)

@@ -1,0 +1,538 @@
+---
+title: Configuration
+description: Complete guide to configuring the Adgent SDK with all available options, defaults, and use cases.
+---
+
+# Configuration
+
+The Adgent SDK is highly configurable to support various Smart TV platforms and advertising requirements. This guide covers all available configuration options with practical examples.
+
+## Basic Configuration
+
+The minimal configuration requires only two parameters:
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+await player.init();
+```
+
+## AdPlayerConfig Interface
+
+All configuration options are defined in `src/types/player.ts:9`.
+
+### Required Parameters
+
+<ParamField path="container" type="HTMLElement" required>
+  Container element to render the ad player into. The video element and UI overlays will be appended as children.
+  
+  ```typescript
+  const container = document.getElementById('ad-container');
+  if (!container) throw new Error('Container not found');
+  
+  const player = new AdPlayer({ 
+    container,
+    vastUrl: 'https://example.com/vast.xml'
+  });
+  ```
+</ParamField>
+
+<ParamField path="vastUrl" type="string" required>
+  VAST tag URL to fetch ad data from. Supports VAST 4.x format including wrappers.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://adserver.example.com/vast?placementId=12345'
+  });
+  ```
+</ParamField>
+
+### Media Selection
+
+<ParamField path="targetBitrate" type="number" default="2500">
+  Target bitrate in kbps for media file selection. The SDK selects the closest match from available VAST MediaFiles.
+  
+  **Default**: `2500` (approximately 1080p quality)
+  
+  **Use cases**:
+  - **High-end TVs (4K)**: `5000-8000` kbps
+  - **Standard 1080p TVs**: `2500-3500` kbps
+  - **Budget/720p TVs**: `1500-2000` kbps
+  - **Low bandwidth**: `800-1200` kbps
+  
+  ```typescript
+  // Optimize for budget Smart TVs
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    targetBitrate: 1500 // Lower bitrate for older hardware
+  });
+  ```
+  
+  <Tip>The SDK uses a "closest match" algorithm defined in `src/core/AdPlayer.ts:124`. It automatically filters out excessively high bitrates that may cause buffering on TV platforms.</Tip>
+</ParamField>
+
+### Network Configuration
+
+<ParamField path="maxWrapperDepth" type="number" default="5">
+  Maximum VAST wrapper chain depth to prevent infinite redirects.
+  
+  **Default**: `5`
+  
+  **Use cases**:
+  - **Standard ads**: `3-5` (default is safe)
+  - **Complex programmatic chains**: `7-10`
+  - **Direct VAST only**: `0` (no wrappers allowed)
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    maxWrapperDepth: 3 // Limit wrapper depth for faster load
+  });
+  ```
+  
+  <Warning>Setting this too high may result in slow ad loads. Most ad networks use 2-3 wrapper levels.</Warning>
+</ParamField>
+
+<ParamField path="timeout" type="number" default="10000">
+  Network request timeout in milliseconds for VAST fetching.
+  
+  **Default**: `10000` (10 seconds)
+  
+  **Use cases**:
+  - **Fast networks**: `5000-7000` ms
+  - **Standard**: `10000` ms (default)
+  - **Slow TV WiFi**: `15000-20000` ms
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    timeout: 15000 // Longer timeout for TV WiFi
+  });
+  ```
+</ParamField>
+
+### Skip Configuration
+
+<ParamField path="skipOffset" type="number" default="undefined">
+  Skip offset override in seconds. When set, this overrides the skip offset from the VAST XML.
+  
+  - **`undefined`**: Use skip offset from VAST (default behavior)
+  - **`0`**: Disable skip button entirely
+  - **`> 0`**: Force skip after specified seconds
+  
+  ```typescript
+  // Force 5-second skip regardless of VAST settings
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    skipOffset: 5
+  });
+  
+  // Disable skip completely
+  const nonSkippable = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    skipOffset: 0
+  });
+  ```
+  
+  <Info>The skip button appears at `src/core/AdPlayer.ts:506` and countdown logic is at `src/core/AdPlayer.ts:542`.</Info>
+</ParamField>
+
+<ParamField path="skipButtonText" type="string" default="'Skip Ad'">
+  Custom text for the skip button when skip is available.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    skipButtonText: 'Skip Advertisement'
+  });
+  ```
+  
+  During countdown, the button displays: `"Skip in {N}s"` format.
+</ParamField>
+
+### UI Customization
+
+<ParamField path="customStartOverlay" type="HTMLElement" default="undefined">
+  Custom "Start Ad" overlay UI element for autoplay fallback scenarios.
+  
+  When autoplay fails (common on TVs), the SDK shows an interactive overlay. By default, it creates a play button, but you can provide your own custom element.
+  
+  ```typescript
+  // Create custom overlay
+  const customOverlay = document.createElement('div');
+  customOverlay.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+      <button id="start-btn" style="padding: 20px 40px; font-size: 24px;">
+        ▶ Play Advertisement
+      </button>
+    </div>
+  `;
+  
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    customStartOverlay: customOverlay
+  });
+  ```
+  
+  <Note>The overlay is shown when autoplay fails (`src/core/AdPlayer.ts:287`) and removed when user clicks start.</Note>
+</ParamField>
+
+### Event Callbacks
+
+All event callbacks are optional and provide hooks into the ad lifecycle.
+
+<ParamField path="onStart" type="() => void">
+  Triggered when ad playback begins. Called after VAST impressions are fired.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onStart: () => {
+      console.log('Ad started - pause main content');
+      mainVideo.pause();
+    }
+  });
+  ```
+  
+  See `src/core/AdPlayer.ts:420` for implementation.
+</ParamField>
+
+<ParamField path="onComplete" type="() => void">
+  Triggered when ad finishes playing completely (not skipped).
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onComplete: () => {
+      console.log('Ad completed - resume main content');
+      player.destroy();
+      mainVideo.play();
+    }
+  });
+  ```
+</ParamField>
+
+<ParamField path="onError" type="(error: AdError) => void">
+  Triggered when any error occurs during VAST fetch or playback.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onError: (error) => {
+      console.error('Ad error:', error.code, error.message);
+      
+      if (error.recoverable) {
+        // Attempt recovery
+        console.log('Error is recoverable, retrying...');
+      } else {
+        // Skip ad and resume content
+        player.destroy();
+        mainVideo.play();
+      }
+    }
+  });
+  ```
+  
+  Error structure defined at `src/types/player.ts:116`:
+  ```typescript
+  interface AdError {
+    code: VASTErrorCode | number;
+    message: string;
+    details?: string;
+    recoverable: boolean;
+  }
+  ```
+</ParamField>
+
+<ParamField path="onProgress" type="(progress: AdProgress) => void">
+  Triggered continuously during playback with progress information.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onProgress: (progress) => {
+      console.log(`${progress.percentage.toFixed(1)}% complete`);
+      console.log(`Quartile: ${progress.quartile}/4`);
+      
+      // Update custom progress bar
+      progressBar.style.width = `${progress.percentage}%`;
+    }
+  });
+  ```
+  
+  Progress data structure (`src/types/player.ts:108`):
+  ```typescript
+  interface AdProgress {
+    currentTime: number;     // Current playback time in seconds
+    duration: number;        // Total duration in seconds
+    percentage: number;      // 0-100
+    quartile: 0 | 1 | 2 | 3 | 4; // 0=start, 1=25%, 2=50%, 3=75%, 4=complete
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSkip" type="() => void">
+  Triggered when user skips the ad.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onSkip: () => {
+      console.log('User skipped ad');
+      analytics.track('ad_skipped');
+      player.destroy();
+    }
+  });
+  ```
+</ParamField>
+
+<ParamField path="onClick" type="(clickThroughUrl: string) => void">
+  Triggered when user clicks the ad video. Receives the click-through URL from VAST.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onClick: (url) => {
+      console.log('Ad clicked:', url);
+      // Ad is automatically paused
+      // Click tracking pixels are automatically fired
+      // URL is opened via platform.openExternalLink()
+    }
+  });
+  ```
+  
+  Implementation: `src/core/AdPlayer.ts:343`
+</ParamField>
+
+<ParamField path="onPause" type="() => void">
+  Triggered when ad is paused (either by user or click action).
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onPause: () => {
+      console.log('Ad paused');
+    }
+  });
+  ```
+</ParamField>
+
+<ParamField path="onResume" type="() => void">
+  Triggered when ad resumes from pause.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onResume: () => {
+      console.log('Ad resumed');
+    }
+  });
+  ```
+</ParamField>
+
+<ParamField path="onClose" type="() => void">
+  Triggered when user presses Back/Exit key on remote control.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    onClose: () => {
+      console.log('User pressed back button');
+      player.destroy();
+      // Return to previous screen
+      navigation.goBack();
+    }
+  });
+  ```
+  
+  <Info>If not provided, the Back key defaults to skip behavior (`src/core/AdPlayer.ts:699`).</Info>
+</ParamField>
+
+### Debug Configuration
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable verbose debug logging to console.
+  
+  ```typescript
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: 'https://example.com/vast.xml',
+    debug: true // Enable for development
+  });
+  ```
+  
+  When enabled, logs:
+  - VAST parsing steps
+  - Media file selection
+  - Video element events (loadstart, canplay, playing, etc.)
+  - Key presses and actions
+  - Tracking pixel fires
+  
+  <Warning>Disable in production to reduce console noise and improve performance.</Warning>
+</ParamField>
+
+## Complete Example
+
+Here's a production-ready configuration with all common options:
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  // Required
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://adserver.example.com/vast?id=12345',
+  
+  // Media selection
+  targetBitrate: 2500, // 1080p quality
+  
+  // Network
+  maxWrapperDepth: 5,
+  timeout: 10000,
+  
+  // Skip settings
+  skipOffset: undefined, // Use VAST value
+  skipButtonText: 'Skip Ad',
+  
+  // Lifecycle callbacks
+  onStart: () => {
+    console.log('Ad started');
+    mainVideo.pause();
+  },
+  
+  onComplete: () => {
+    console.log('Ad completed');
+    player.destroy();
+    mainVideo.play();
+  },
+  
+  onSkip: () => {
+    console.log('Ad skipped');
+    analytics.track('ad_skipped');
+    player.destroy();
+    mainVideo.play();
+  },
+  
+  onError: (error) => {
+    console.error('Ad error:', error);
+    player.destroy();
+    mainVideo.play();
+  },
+  
+  onProgress: (progress) => {
+    // Update UI
+    updateProgressBar(progress.percentage);
+  },
+  
+  onClick: (url) => {
+    console.log('Ad clicked:', url);
+    analytics.track('ad_clicked', { url });
+  },
+  
+  onClose: () => {
+    console.log('User closed ad');
+    player.destroy();
+    navigation.goBack();
+  },
+  
+  // Debug (development only)
+  debug: process.env.NODE_ENV === 'development'
+});
+
+// Initialize and start
+await player.init();
+```
+
+## Platform-Specific Recommendations
+
+### Tizen (Samsung)
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 3500, // Samsung TVs handle higher bitrates well
+  timeout: 12000,
+  debug: false
+});
+```
+
+### WebOS (LG)
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 2500, // Conservative for older LG models
+  timeout: 15000, // WebOS networking can be slower
+  debug: false
+});
+```
+
+### Generic Web / Desktop
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 5000, // Desktop can handle higher quality
+  timeout: 8000,
+  debug: false
+});
+```
+
+## Default Values Summary
+
+All defaults are defined at `src/core/AdPlayer.ts:22`:
+
+```typescript
+const DEFAULT_CONFIG = {
+  targetBitrate: 2500,
+  maxWrapperDepth: 5,
+  timeout: 10000,
+  debug: false,
+  skipButtonText: 'Skip Ad'
+};
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Event Handling" icon="bell" href="/guides/event-handling">
+    Learn about the event system and listeners
+  </Card>
+  
+  <Card title="Platform Detection" icon="tv" href="/guides/platform-detection">
+    Detect and adapt to different Smart TV platforms
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors gracefully with recovery strategies
+  </Card>
+  
+  <Card title="Optimization" icon="gauge-high" href="/guides/optimization">
+    Optimize performance for Smart TV constraints
+  </Card>
+</CardGroup>

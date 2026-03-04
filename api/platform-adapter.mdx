@@ -1,0 +1,501 @@
+---
+title: 'PlatformAdapter'
+description: 'Platform detection and key code normalization for Smart TV runtimes'
+icon: 'tv'
+---
+
+## Overview
+
+The `PlatformAdapter` class detects the current Smart TV platform (Tizen, WebOS, FireTV, etc.) and normalizes remote control key codes into consistent actions. It also provides platform-specific capabilities detection and recommended video settings.
+
+## Features
+
+- **Platform Detection**: Automatically detects TV platform using userAgent and global objects
+- **Key Normalization**: Maps platform-specific key codes to consistent actions
+- **Capabilities Detection**: Reports platform support for codecs, HDR, voice, etc.
+- **Video Attributes**: Provides platform-specific video element attributes
+- **Recommended Settings**: Suggests optimal bitrate and codec for each platform
+
+## Usage
+
+<Note>
+Use the singleton function `getPlatformAdapter()` instead of instantiating directly.
+</Note>
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+console.log('Platform:', adapter.platform);
+```
+
+## getPlatformAdapter()
+
+Get or create the platform adapter singleton.
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+```
+
+**Returns**: `PlatformAdapter`
+
+**Note**: Always returns the same instance (singleton pattern).
+
+## Properties
+
+### platform
+
+The detected platform.
+
+```typescript
+const adapter = getPlatformAdapter();
+console.log('Platform:', adapter.platform);
+// Output: 'tizen', 'webos', 'firetv', etc.
+```
+
+**Type**: `Platform`
+
+**Values**:
+- `Platform.Tizen` - Samsung Tizen TV
+- `Platform.WebOS` - LG WebOS TV
+- `Platform.FireTV` - Amazon Fire TV
+- `Platform.Roku` - Roku devices
+- `Platform.AndroidTV` - Android TV
+- `Platform.Xbox` - Xbox consoles
+- `Platform.PlayStation` - PlayStation consoles
+- `Platform.Vidaa` - Hisense Vidaa TV
+- `Platform.Generic` - Unknown/desktop browser
+
+### capabilities
+
+Platform capabilities and feature support.
+
+```typescript
+const adapter = getPlatformAdapter();
+
+if (adapter.capabilities.sendBeacon) {
+  console.log('Beacon API supported');
+}
+
+if (adapter.capabilities.hdr) {
+  console.log('HDR supported');
+}
+
+console.log('Max resolution:', adapter.capabilities.maxResolution);
+```
+
+**Type**: `PlatformCapabilities`
+
+```typescript
+interface PlatformCapabilities {
+  sendBeacon: boolean;
+  fetchKeepalive: boolean;
+  mutedAutoplayRequired: boolean;
+  fullscreen: boolean;
+  hardwareDecodeInfo: boolean;
+  hdr: boolean;
+  hdr10Plus: boolean;
+  dolbyVision: boolean;
+  dolbyAtmos: boolean;
+  hevc: boolean;
+  vp9: boolean;
+  av1: boolean;
+  maxResolution: '4k' | '1080p' | '720p' | 'unknown';
+  touch: boolean;
+  voice: boolean;
+}
+```
+
+### deviceInfo
+
+Device-specific information.
+
+```typescript
+const adapter = getPlatformAdapter();
+console.log('Device info:', adapter.deviceInfo);
+```
+
+**Type**: `DeviceInfo`
+
+```typescript
+interface DeviceInfo {
+  platform: Platform;
+  manufacturer?: string;
+  model?: string;
+  osVersion?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  devicePixelRatio?: number;
+}
+```
+
+## Methods
+
+### normalizeKeyCode()
+
+Normalize a raw key code to a KeyAction.
+
+```typescript
+const adapter = getPlatformAdapter();
+
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Enter) {
+    console.log('Enter pressed');
+  } else if (action === KeyAction.Back) {
+    console.log('Back pressed');
+  }
+});
+```
+
+**Parameters**:
+- `keyCode: number` - Raw keyboard/remote key code
+
+**Returns**: `KeyAction | null`
+
+**Key Actions**:
+- `KeyAction.Enter` - Select/OK button
+- `KeyAction.Back` - Back/Return button
+- `KeyAction.Up` - D-pad up
+- `KeyAction.Down` - D-pad down
+- `KeyAction.Left` - D-pad left
+- `KeyAction.Right` - D-pad right
+- `KeyAction.Play` - Play button
+- `KeyAction.Pause` - Pause button
+- `KeyAction.Stop` - Stop button
+- `KeyAction.Rewind` - Rewind button
+- `KeyAction.FastForward` - Fast forward button
+
+### getKeyCodesForAction()
+
+Get all key codes that map to a specific action.
+
+```typescript
+const adapter = getPlatformAdapter();
+const enterCodes = adapter.getKeyCodesForAction(KeyAction.Enter);
+console.log('Enter key codes:', enterCodes);
+// Output: [13] (on generic platform)
+// Output: [13, 29443] (on Tizen)
+```
+
+**Parameters**:
+- `action: KeyAction` - The key action
+
+**Returns**: `number[]` - Array of key codes
+
+### isCodecSupported()
+
+Check if a specific codec is supported.
+
+```typescript
+const adapter = getPlatformAdapter();
+
+if (adapter.isCodecSupported('video/mp4; codecs="hvc1"')) {
+  console.log('HEVC supported');
+}
+
+if (adapter.isCodecSupported('video/webm; codecs="vp9"')) {
+  console.log('VP9 supported');
+}
+```
+
+**Parameters**:
+- `codec: string` - MIME type with codec string
+
+**Returns**: `boolean`
+
+### registerTizenKeys()
+
+Register Tizen-specific key handlers (required for media keys).
+
+```typescript
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === 'tizen') {
+  adapter.registerTizenKeys();
+}
+```
+
+**Note**: Automatically called by AdgentSDK for Tizen apps (src/core/AdPlayer.ts:82).
+
+**Registered keys**:
+- MediaPlay, MediaPause, MediaStop
+- MediaFastForward, MediaRewind, MediaPlayPause
+- ColorF0Red, ColorF1Green, ColorF2Yellow, ColorF3Blue
+- Info
+
+### getVideoAttributes()
+
+Get platform-specific video element attributes.
+
+```typescript
+const adapter = getPlatformAdapter();
+const attrs = adapter.getVideoAttributes();
+
+// Apply to video element
+Object.entries(attrs).forEach(([key, value]) => {
+  if (typeof value === 'boolean') {
+    if (value) video.setAttribute(key, '');
+  } else {
+    video.setAttribute(key, value);
+  }
+});
+```
+
+**Returns**: `Record<string, string | boolean>`
+
+**Common attributes**:
+- `muted: true`
+- `playsinline: true`
+- `autoplay: true`
+- `webkit-playsinline: true`
+
+**Platform-specific**:
+- Tizen: `data-samsung-immersive: 'true'`
+- WebOS: `data-lg-immersive: 'true'`
+- FireTV/AndroidTV: `x-webkit-airplay: 'allow'`
+
+### getRecommendedVideoSettings()
+
+Get recommended video settings for this platform.
+
+```typescript
+const adapter = getPlatformAdapter();
+const settings = adapter.getRecommendedVideoSettings();
+
+console.log('Recommended bitrate:', settings.maxBitrate);
+console.log('Preferred codec:', settings.preferredCodec);
+console.log('Max resolution:', settings.maxResolution);
+```
+
+**Returns**: `{ maxBitrate: number, preferredCodec: string, maxResolution: string }`
+
+**Platform recommendations**:
+
+| Platform | Max Bitrate | Codec | Max Resolution |
+|----------|-------------|-------|----------------|
+| Tizen | 15000 kbps | hevc | 4k |
+| WebOS | 15000 kbps | hevc | 4k |
+| FireTV | 10000 kbps | hevc | 4k |
+| Roku | 8000 kbps | h264 | 4k |
+| Xbox | 20000 kbps | hevc | 4k |
+| PlayStation | 20000 kbps | hevc | 4k |
+| Generic | 5000 kbps | h264 | 1080p |
+
+### openExternalLink()
+
+Open an external link in a new tab/window.
+
+```typescript
+const adapter = getPlatformAdapter();
+adapter.openExternalLink('https://example.com');
+```
+
+**Parameters**:
+- `url: string` - URL to open
+
+**Platform support**:
+- **Tizen**: Supported (opens system browser)
+- **WebOS**: Supported (opens system browser)
+- **Other TVs**: Not supported (logs warning)
+- **Desktop**: Opens in new tab
+
+### debug()
+
+Show debug message using platform-specific notifications.
+
+```typescript
+const adapter = getPlatformAdapter();
+adapter.debug('Video playback started');
+```
+
+**Parameters**:
+- `message: string` - Debug message
+
+**Output**:
+- All platforms: `console.log('[Adgent] message')`
+- WebOS: Also shows native toast notification (if available)
+
+## Platform Detection
+
+Detection is automatic and uses multiple strategies (src/core/PlatformAdapter.ts:39):
+
+### Global Objects
+
+```typescript
+// Tizen
+if (window.tizen) return Platform.Tizen;
+
+// WebOS
+if (window.webOS || window.PalmSystem) return Platform.WebOS;
+```
+
+### User Agent Patterns
+
+Fallback to regex matching:
+
+```typescript
+// FireTV
+if (/AFTT|AFTM|AFTB|AFTA|AFTS/.test(userAgent)) return Platform.FireTV;
+
+// AndroidTV
+if (/Android.*TV/.test(userAgent)) return Platform.AndroidTV;
+
+// Roku
+if (/Roku/.test(userAgent)) return Platform.Roku;
+```
+
+## Example Usage
+
+### Basic Platform Detection
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+console.log('Platform:', adapter.platform);
+console.log('Manufacturer:', adapter.deviceInfo.manufacturer);
+console.log('Model:', adapter.deviceInfo.model);
+
+if (adapter.platform === Platform.Tizen) {
+  console.log('Running on Samsung TV');
+  adapter.registerTizenKeys();
+} else if (adapter.platform === Platform.WebOS) {
+  console.log('Running on LG TV');
+}
+```
+
+### Key Handling
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (!action) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  
+  switch (action) {
+    case KeyAction.Enter:
+      console.log('Select pressed');
+      break;
+    case KeyAction.Back:
+      console.log('Back pressed');
+      break;
+    case KeyAction.Play:
+      video.play();
+      break;
+    case KeyAction.Pause:
+      video.pause();
+      break;
+  }
+});
+```
+
+### Capabilities Check
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Check codec support
+if (adapter.capabilities.hevc) {
+  console.log('Can use HEVC/H.265');
+} else {
+  console.log('Fallback to H.264');
+}
+
+// Check HDR support
+if (adapter.capabilities.hdr) {
+  console.log('HDR content supported');
+  
+  if (adapter.capabilities.dolbyVision) {
+    console.log('Dolby Vision supported');
+  }
+}
+
+// Check resolution
+switch (adapter.capabilities.maxResolution) {
+  case '4k':
+    console.log('Can play 4K content');
+    break;
+  case '1080p':
+    console.log('Limited to 1080p');
+    break;
+}
+```
+
+### Platform-Specific Video Setup
+
+```typescript
+const adapter = getPlatformAdapter();
+const video = document.createElement('video');
+
+// Apply platform-specific attributes
+const attrs = adapter.getVideoAttributes();
+Object.entries(attrs).forEach(([key, value]) => {
+  if (typeof value === 'boolean') {
+    if (value) video.setAttribute(key, '');
+  } else {
+    video.setAttribute(key, value);
+  }
+});
+
+// Get recommended settings
+const settings = adapter.getRecommendedVideoSettings();
+console.log('Use bitrate:', settings.maxBitrate);
+console.log('Prefer codec:', settings.preferredCodec);
+```
+
+### Ad Click Handling
+
+```typescript
+const adapter = getPlatformAdapter();
+
+video.addEventListener('click', () => {
+  const clickThroughUrl = 'https://advertiser.com/product';
+  
+  // Pause video
+  video.pause();
+  
+  // Try to open link
+  adapter.openExternalLink(clickThroughUrl);
+  
+  // On platforms that don't support opening links, this will just log a warning
+});
+```
+
+## Testing
+
+Reset the singleton for testing:
+
+```typescript
+import { resetPlatformAdapter } from 'adgent-sdk';
+
+// Reset singleton
+resetPlatformAdapter();
+
+// Next call to getPlatformAdapter() will create a new instance
+const adapter = getPlatformAdapter();
+```
+
+## Related Types
+
+- [Platform](/api/types/platform)
+- [KeyAction](/api/types/key-action)
+- [PlatformCapabilities](/api/types/platform-capabilities)
+- [DeviceInfo](/api/types/device-info)
+
+## See Also
+
+- [AdgentSDK](/api/adgent-sdk) - Main player class
+- [VASTParser](/api/vast-parser) - VAST parsing
+- [AdTracker](/api/ad-tracker) - Tracking pixel management

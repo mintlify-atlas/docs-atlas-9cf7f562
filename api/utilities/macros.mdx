@@ -1,0 +1,209 @@
+---
+title: Macro Replacement
+description: VAST macro substitution utilities for tracking URLs
+---
+
+<Icon icon="wand-magic-sparkles" iconType="solid" />
+
+The `replaceMacros()` function handles VAST macro substitution in tracking URLs, converting placeholder tokens like `[TIMESTAMP]` into actual values.
+
+## Function Signature
+
+```typescript
+function replaceMacros(url: string, context?: MacroContext): string
+```
+
+<ParamField path="url" type="string" required>
+  URL containing VAST macros to replace
+</ParamField>
+
+<ParamField path="context" type="MacroContext">
+  Values to substitute for macros
+  
+  <Expandable title="properties">
+    <ParamField path="assetUri" type="string">
+      Current media file URI
+    </ParamField>
+    <ParamField path="contentPlayhead" type="number">
+      Content playback position in seconds
+    </ParamField>
+    <ParamField path="adPlayhead" type="number">
+      Ad playback position in seconds
+    </ParamField>
+    <ParamField path="errorCode" type="number">
+      VAST error code
+    </ParamField>
+    <ParamField path="breakPosition" type="number">
+      Position in ad break
+    </ParamField>
+    <ParamField path="adType" type="string">
+      Type of ad (e.g., 'linear', 'nonlinear')
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Supported Macros
+
+The SDK supports 8 VAST macros as defined in the IAB specification:
+
+| Macro | Replacement | Notes |
+|-------|-------------|-------|
+| `[TIMESTAMP]` | Current Unix timestamp | Always replaced (e.g., `1704067200000`) |
+| `[CACHEBUSTING]` | Random cache buster | Always replaced (e.g., `x8k2j9f4p`) |
+| `[ASSETURI]` | Media file URI | URL-encoded |
+| `[CONTENTPLAYHEAD]` | Content position | `HH:MM:SS.mmm` format |
+| `[ADPLAYHEAD]` | Ad position | `HH:MM:SS.mmm` format |
+| `[ERRORCODE]` | VAST error code | Integer (e.g., `400`) |
+| `[BREAKPOSITION]` | Position in break | Integer (e.g., `1`) |
+| `[ADTYPE]` | Ad type | String (e.g., `linear`) |
+
+<Note>
+  `[TIMESTAMP]` and `[CACHEBUSTING]` are always replaced, even if no context is provided.
+</Note>
+
+## Usage Examples
+
+### Basic Usage
+
+```typescript
+import { replaceMacros } from 'adgent-sdk';
+
+const trackingUrl = 'https://example.com/track?t=[TIMESTAMP]&cb=[CACHEBUSTING]';
+const finalUrl = replaceMacros(trackingUrl);
+// Result: 'https://example.com/track?t=1704067200000&cb=x8k2j9f4p'
+```
+
+### With Playhead Context
+
+```typescript
+const url = 'https://example.com/progress?time=[ADPLAYHEAD]';
+const finalUrl = replaceMacros(url, {
+  adPlayhead: 5.5
+});
+// Result: 'https://example.com/progress?time=00:00:05.500'
+```
+
+### Error Tracking
+
+```typescript
+const errorUrl = 'https://example.com/error?code=[ERRORCODE]';
+const finalUrl = replaceMacros(errorUrl, {
+  errorCode: 400
+});
+// Result: 'https://example.com/error?code=400'
+```
+
+### Complete Context
+
+```typescript
+const trackingUrl = 'https://example.com/track?asset=[ASSETURI]&ad=[ADPLAYHEAD]&content=[CONTENTPLAYHEAD]&type=[ADTYPE]';
+
+const finalUrl = replaceMacros(trackingUrl, {
+  assetUri: 'https://cdn.example.com/ad.mp4',
+  adPlayhead: 10.25,
+  contentPlayhead: 120.75,
+  adType: 'linear'
+});
+
+// Result:
+// 'https://example.com/track?asset=https%3A%2F%2Fcdn.example.com%2Fad.mp4&ad=00:00:10.250&content=00:02:00.750&type=linear'
+```
+
+## Integration with AdTracker
+
+The SDK's `AdTracker` class automatically uses `replaceMacros()` internally:
+
+```typescript
+import { AdTracker } from 'adgent-sdk';
+
+const tracker = new AdTracker({
+  impressions: ['https://example.com/imp?t=[TIMESTAMP]'],
+  trackingEvents: {
+    start: ['https://example.com/start?pos=[ADPLAYHEAD]']
+  }
+});
+
+// Macros are automatically replaced when tracking
+tracker.track('start', { adPlayhead: 0 });
+```
+
+<Tip>
+  You don't need to call `replaceMacros()` directly when using the SDK's built-in tracking—it's handled automatically.
+</Tip>
+
+## Playhead Format
+
+Playhead macros (`[ADPLAYHEAD]` and `[CONTENTPLAYHEAD]`) use the VAST standard format:
+
+```
+HH:MM:SS.mmm
+```
+
+Examples:
+- `0.5` seconds → `00:00:00.500`
+- `65.25` seconds → `00:01:05.250`
+- `3661.123` seconds → `01:01:01.123`
+
+This format is required by the IAB VAST specification for quartile and progress tracking.
+
+## Types
+
+### VastMacro
+
+```typescript
+type VastMacro =
+  | '[TIMESTAMP]'
+  | '[CACHEBUSTING]'
+  | '[ASSETURI]'
+  | '[CONTENTPLAYHEAD]'
+  | '[ERRORCODE]'
+  | '[BREAKPOSITION]'
+  | '[ADPLAYHEAD]'
+  | '[ADTYPE]';
+```
+
+### MacroContext
+
+```typescript
+interface MacroContext {
+  assetUri?: string;
+  contentPlayhead?: number;
+  adPlayhead?: number;
+  errorCode?: number;
+  breakPosition?: number;
+  adType?: string;
+}
+```
+
+## Implementation Details
+
+From `src/utils/macros.ts:32-87`:
+
+- Macros are replaced using string `.replace()` with global regex
+- `[ASSETURI]` is URL-encoded using `encodeURIComponent()`
+- Playhead values are converted from seconds to `HH:MM:SS.mmm` format
+- Missing context values leave macros unreplaced
+- Replacement is idempotent (can be called multiple times safely)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always provide context" icon="database">
+    Pass the relevant context when tracking events to ensure accurate reporting
+  </Card>
+  <Card title="Test with real URLs" icon="flask">
+    Test macro replacement with your actual tracking URLs during development
+  </Card>
+  <Card title="Log for debugging" icon="bug">
+    Log final URLs in development to verify macro replacement
+  </Card>
+  <Card title="Handle encoding" icon="lock">
+    Asset URIs are automatically URL-encoded—don't encode them manually
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [AdTracker API](/api/ad-tracker) - Uses macros internally
+- [Error Handling](/guides/error-handling) - Error code macros
+- [Event Handling](/guides/event-handling) - Playhead tracking

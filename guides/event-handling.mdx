@@ -1,0 +1,834 @@
+---
+title: Event Handling
+description: Comprehensive guide to Adgent SDK's event system, listeners, callbacks, and quartile tracking.
+---
+
+# Event Handling
+
+The Adgent SDK provides a robust event system for monitoring and responding to ad playback lifecycle events. This guide covers both the callback-based API and the event listener system.
+
+## Event System Overview
+
+The SDK supports two ways to handle events:
+
+1. **Callback Functions**: Passed in configuration (simple, single handler)
+2. **Event Listeners**: Using the `on()` method (advanced, multiple handlers)
+
+Both approaches can be used simultaneously.
+
+## Callback-Based Events
+
+The simplest way to handle events is through configuration callbacks.
+
+### Basic Usage
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // Lifecycle callbacks
+  onStart: () => console.log('Ad started'),
+  onComplete: () => console.log('Ad completed'),
+  onError: (error) => console.error('Error:', error),
+  onSkip: () => console.log('Ad skipped')
+});
+
+await player.init();
+```
+
+### Available Callbacks
+
+All callbacks are defined in `src/types/player.ts:34-62`:
+
+| Callback | Parameters | Description |
+|----------|------------|-------------|
+| `onStart` | `() => void` | Ad playback begins |
+| `onComplete` | `() => void` | Ad finishes completely |
+| `onError` | `(error: AdError) => void` | Error occurs |
+| `onProgress` | `(progress: AdProgress) => void` | Continuous progress updates |
+| `onSkip` | `() => void` | User skips ad |
+| `onClick` | `(url: string) => void` | User clicks ad |
+| `onPause` | `() => void` | Ad is paused |
+| `onResume` | `() => void` | Ad resumes from pause |
+| `onClose` | `() => void` | Back/Exit key pressed |
+
+## Event Listener API
+
+For advanced use cases, use the `on()` method to attach event listeners. This allows multiple handlers and programmatic subscription management.
+
+### Using the on() Method
+
+The `on()` method is defined at `src/core/AdPlayer.ts:755`:
+
+```typescript
+on(listener: AdPlayerEventListener): () => void
+```
+
+It returns an unsubscribe function for cleanup.
+
+### Basic Example
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+// Subscribe to events
+const unsubscribe = player.on((event) => {
+  console.log('Event:', event.type);
+});
+
+await player.init();
+
+// Later: cleanup
+unsubscribe();
+```
+
+### Event Types
+
+All event types are defined in `src/types/player.ts:124-137`:
+
+```typescript
+type AdPlayerEvent = 
+  | { type: 'loaded' }
+  | { type: 'start' }
+  | { type: 'progress'; data: AdProgress }
+  | { type: 'quartile'; data: { quartile: TrackingEventType } }
+  | { type: 'complete' }
+  | { type: 'skip' }
+  | { type: 'click'; data: { url: string } }
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'mute' }
+  | { type: 'unmute' }
+  | { type: 'error'; data: AdError }
+  | { type: 'destroy' };
+```
+
+### Handling All Events
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+player.on((event) => {
+  switch (event.type) {
+    case 'loaded':
+      console.log('VAST loaded and ready');
+      break;
+      
+    case 'start':
+      console.log('Ad playback started');
+      mainVideo.pause();
+      break;
+      
+    case 'progress':
+      console.log(`Progress: ${event.data.percentage.toFixed(1)}%`);
+      console.log(`Time: ${event.data.currentTime}/${event.data.duration}s`);
+      updateProgressBar(event.data.percentage);
+      break;
+      
+    case 'quartile':
+      console.log(`Quartile: ${event.data.quartile}`);
+      analytics.track('quartile', { quartile: event.data.quartile });
+      break;
+      
+    case 'complete':
+      console.log('Ad completed');
+      player.destroy();
+      mainVideo.play();
+      break;
+      
+    case 'skip':
+      console.log('Ad skipped');
+      player.destroy();
+      mainVideo.play();
+      break;
+      
+    case 'click':
+      console.log('Ad clicked:', event.data.url);
+      analytics.track('ad_click', { url: event.data.url });
+      break;
+      
+    case 'pause':
+      console.log('Ad paused');
+      break;
+      
+    case 'resume':
+      console.log('Ad resumed');
+      break;
+      
+    case 'mute':
+      console.log('Ad muted');
+      break;
+      
+    case 'unmute':
+      console.log('Ad unmuted');
+      break;
+      
+    case 'error':
+      console.error('Ad error:', event.data);
+      player.destroy();
+      mainVideo.play();
+      break;
+      
+    case 'destroy':
+      console.log('Player destroyed');
+      break;
+  }
+});
+```
+
+## Event Details
+
+### loaded
+
+Fired when VAST is successfully parsed and the player is ready.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'loaded') {
+    console.log('VAST loaded, duration:', player.getState().duration);
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:207`
+
+### start
+
+Fired when ad playback begins. This is called after successful autoplay or user interaction.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'start') {
+    // Pause main content
+    mainVideo.pause();
+    
+    // Track ad start
+    analytics.track('ad_started');
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:423`
+
+<Note>Impressions are automatically fired before this event (`src/core/AdPlayer.ts:426`).</Note>
+
+### progress
+
+Fired continuously during playback with detailed progress information.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'progress') {
+    const { currentTime, duration, percentage, quartile } = event.data;
+    
+    console.log(`${currentTime.toFixed(1)}s / ${duration.toFixed(1)}s`);
+    console.log(`${percentage.toFixed(1)}% (Q${quartile})`);
+    
+    // Update custom UI
+    progressBar.style.width = `${percentage}%`;
+    timeDisplay.textContent = formatTime(currentTime, duration);
+  }
+});
+```
+
+**Data structure** (`src/types/player.ts:108`):
+
+```typescript
+interface AdProgress {
+  currentTime: number;           // Current playback time in seconds
+  duration: number;              // Total duration in seconds
+  percentage: number;            // 0-100
+  quartile: 0 | 1 | 2 | 3 | 4;  // 0=start, 1=25%, 2=50%, 3=75%, 4=complete
+}
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:466`
+
+### quartile
+
+Fired when ad reaches quartile milestones (25%, 50%, 75%).
+
+```typescript
+player.on((event) => {
+  if (event.type === 'quartile') {
+    const { quartile } = event.data;
+    
+    console.log('Quartile reached:', quartile);
+    // quartile = 'firstQuartile' | 'midpoint' | 'thirdQuartile'
+    
+    // Send to analytics
+    analytics.track('ad_quartile', { quartile });
+  }
+});
+```
+
+**Quartile values** (`src/types/vast.ts:106`):
+- `'firstQuartile'` - 25% complete
+- `'midpoint'` - 50% complete
+- `'thirdQuartile'` - 75% complete
+
+**Implementation**: `src/core/AdPlayer.ts:486-500`
+
+<Info>Quartile tracking pixels are automatically fired. This event is for your own analytics.</Info>
+
+### complete
+
+Fired when ad finishes playing completely (reached 100%).
+
+```typescript
+player.on((event) => {
+  if (event.type === 'complete') {
+    console.log('Ad completed successfully');
+    
+    // Cleanup
+    player.destroy();
+    
+    // Resume main content
+    mainVideo.play();
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:585`
+
+<Note>The `complete` tracking pixel is automatically fired before this event.</Note>
+
+### skip
+
+Fired when user skips the ad.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'skip') {
+    console.log('User skipped ad');
+    
+    // Track skip event
+    analytics.track('ad_skipped', {
+      watchTime: player.getState().currentTime
+    });
+    
+    // Player is automatically destroyed after skip
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:572`
+
+**Trigger points**:
+- User clicks skip button when available
+- User presses Back key (if `onClose` not configured)
+- Programmatic `player.skip()` call
+
+### click
+
+Fired when user clicks the ad video.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'click') {
+    console.log('Ad clicked, URL:', event.data.url);
+    
+    // Track click
+    analytics.track('ad_clicked', { 
+      url: event.data.url,
+      watchTime: player.getState().currentTime
+    });
+    
+    // Video is automatically paused
+    // Click-through URL is automatically opened
+    // Click tracking pixels are automatically fired
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:373`
+
+**Automatic behavior**:
+1. Video pauses
+2. Click tracking pixels fire
+3. URL opens via `platform.openExternalLink()`
+4. Start overlay appears for resume
+
+### pause
+
+Fired when ad is paused.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'pause') {
+    console.log('Ad paused');
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:236`
+
+**Triggers**:
+- User clicks ad (click-through)
+- Programmatic `videoElement.pause()`
+
+### resume
+
+Fired when ad resumes from paused state.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'resume') {
+    console.log('Ad resumed');
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:391`
+
+### mute / unmute
+
+Fired when ad is muted or unmuted.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'mute') {
+    console.log('Ad muted');
+    muteButton.textContent = '🔇';
+  }
+  
+  if (event.type === 'unmute') {
+    console.log('Ad unmuted');
+    muteButton.textContent = '🔊';
+  }
+});
+
+// Control mute state
+muteButton.addEventListener('click', () => {
+  if (player.getState().muted) {
+    player.unmute();
+  } else {
+    player.mute();
+  }
+});
+```
+
+**Methods**: `src/core/AdPlayer.ts:731-750`
+
+<Note>The SDK starts with muted autoplay by default for TV platform compliance.</Note>
+
+### error
+
+Fired when any error occurs.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'error') {
+    const { code, message, recoverable } = event.data;
+    
+    console.error(`Error ${code}: ${message}`);
+    
+    if (recoverable) {
+      console.log('Attempting recovery...');
+    } else {
+      console.log('Fatal error, resuming content');
+      player.destroy();
+      mainVideo.play();
+    }
+  }
+});
+```
+
+**Error structure** (`src/types/player.ts:116`):
+
+```typescript
+interface AdError {
+  code: VASTErrorCode | number;
+  message: string;
+  details?: string;
+  recoverable: boolean;
+}
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:606`
+
+See [Error Handling Guide](/guides/error-handling) for details.
+
+### destroy
+
+Fired when player is destroyed and all resources cleaned up.
+
+```typescript
+player.on((event) => {
+  if (event.type === 'destroy') {
+    console.log('Player destroyed, all resources cleaned');
+  }
+});
+```
+
+**Emitted at**: `src/core/AdPlayer.ts:799`
+
+## Multiple Listeners
+
+You can attach multiple event listeners:
+
+```typescript
+const player = new AdPlayer({ /* config */ });
+
+// Analytics listener
+const unsubscribe1 = player.on((event) => {
+  analytics.track(`ad_${event.type}`, event);
+});
+
+// UI listener
+const unsubscribe2 = player.on((event) => {
+  if (event.type === 'progress') {
+    updateUI(event.data);
+  }
+});
+
+// Debug listener
+const unsubscribe3 = player.on((event) => {
+  console.log('[DEBUG]', event);
+});
+
+// Cleanup all
+function cleanup() {
+  unsubscribe1();
+  unsubscribe2();
+  unsubscribe3();
+}
+```
+
+## Quartile Tracking
+
+Quartile tracking is automatically handled by the SDK. Quartiles are fired at:
+
+- **First Quartile**: 25% complete
+- **Midpoint**: 50% complete
+- **Third Quartile**: 75% complete
+
+### Implementation Details
+
+Quartile logic is at `src/core/AdPlayer.ts:486-500`:
+
+```typescript
+private fireQuartileEvents(percentage: number): void {
+  const quartiles = [
+    { threshold: 25, event: 'firstQuartile' },
+    { threshold: 50, event: 'midpoint' },
+    { threshold: 75, event: 'thirdQuartile' }
+  ];
+
+  for (const { threshold, event } of quartiles) {
+    if (percentage >= threshold && !this.quartilesFired.has(threshold)) {
+      this.quartilesFired.add(threshold);
+      this.tracker?.track(event);
+      this.emit({ type: 'quartile', data: { quartile: event } });
+    }
+  }
+}
+```
+
+### Listening to Quartiles
+
+```typescript
+player.on((event) => {
+  if (event.type === 'quartile') {
+    const { quartile } = event.data;
+    
+    switch (quartile) {
+      case 'firstQuartile':
+        console.log('25% complete');
+        break;
+      case 'midpoint':
+        console.log('50% complete');
+        break;
+      case 'thirdQuartile':
+        console.log('75% complete');
+        break;
+    }
+  }
+});
+```
+
+<Note>Quartile tracking pixels from VAST are automatically fired. No manual action needed.</Note>
+
+## Real-World Examples
+
+### Example 1: Full Lifecycle Management
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+class AdManager {
+  private player: AdPlayer | null = null;
+  private mainVideo: HTMLVideoElement;
+  
+  constructor(mainVideo: HTMLVideoElement) {
+    this.mainVideo = mainVideo;
+  }
+  
+  async playAd(vastUrl: string) {
+    this.player = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl,
+      
+      onStart: () => {
+        this.mainVideo.pause();
+        this.hideMainControls();
+      },
+      
+      onComplete: () => {
+        this.cleanup();
+        this.resumeMainContent();
+      },
+      
+      onSkip: () => {
+        this.cleanup();
+        this.resumeMainContent();
+      },
+      
+      onError: (error) => {
+        console.error('Ad error:', error);
+        this.cleanup();
+        this.resumeMainContent();
+      },
+      
+      onProgress: (progress) => {
+        this.updateAdProgress(progress);
+      }
+    });
+    
+    await this.player.init();
+  }
+  
+  private cleanup() {
+    this.player?.destroy();
+    this.player = null;
+  }
+  
+  private resumeMainContent() {
+    this.showMainControls();
+    this.mainVideo.play();
+  }
+  
+  private updateAdProgress(progress: AdProgress) {
+    const progressBar = document.getElementById('ad-progress');
+    if (progressBar) {
+      progressBar.style.width = `${progress.percentage}%`;
+    }
+  }
+  
+  private hideMainControls() {
+    // Hide main video controls
+  }
+  
+  private showMainControls() {
+    // Show main video controls
+  }
+}
+```
+
+### Example 2: Analytics Integration
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+// Comprehensive analytics tracking
+player.on((event) => {
+  const timestamp = Date.now();
+  const state = player.getState();
+  
+  switch (event.type) {
+    case 'start':
+      analytics.track('ad_started', {
+        timestamp,
+        duration: state.duration,
+        vastUrl: 'https://example.com/vast.xml'
+      });
+      break;
+      
+    case 'quartile':
+      analytics.track('ad_quartile', {
+        timestamp,
+        quartile: event.data.quartile,
+        watchTime: state.currentTime
+      });
+      break;
+      
+    case 'complete':
+      analytics.track('ad_completed', {
+        timestamp,
+        duration: state.duration,
+        completionRate: 100
+      });
+      break;
+      
+    case 'skip':
+      analytics.track('ad_skipped', {
+        timestamp,
+        watchTime: state.currentTime,
+        skipTime: state.currentTime / state.duration * 100
+      });
+      break;
+      
+    case 'click':
+      analytics.track('ad_clicked', {
+        timestamp,
+        url: event.data.url,
+        watchTime: state.currentTime
+      });
+      break;
+      
+    case 'error':
+      analytics.track('ad_error', {
+        timestamp,
+        code: event.data.code,
+        message: event.data.message
+      });
+      break;
+  }
+});
+
+await player.init();
+```
+
+### Example 3: Custom UI Updates
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+const progressBar = document.getElementById('progress');
+const timeDisplay = document.getElementById('time');
+const skipButton = document.getElementById('skip-btn');
+
+player.on((event) => {
+  switch (event.type) {
+    case 'progress':
+      const { currentTime, duration, percentage } = event.data;
+      
+      // Update progress bar
+      progressBar.style.width = `${percentage}%`;
+      
+      // Update time display
+      const remaining = Math.ceil(duration - currentTime);
+      timeDisplay.textContent = `Ad: ${remaining}s remaining`;
+      
+      // Show skip when available
+      const state = player.getState();
+      if (state.canSkip) {
+        skipButton.style.display = 'block';
+      }
+      break;
+      
+    case 'complete':
+    case 'skip':
+      progressBar.style.width = '0%';
+      timeDisplay.textContent = '';
+      skipButton.style.display = 'none';
+      break;
+  }
+});
+
+skipButton.addEventListener('click', () => {
+  player.skip();
+});
+
+await player.init();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always clean up listeners">
+    ```typescript
+    const unsubscribe = player.on(handler);
+    
+    // Later
+    unsubscribe();
+    player.destroy();
+    ```
+  </Accordion>
+  
+  <Accordion title="Use both callbacks and listeners appropriately">
+    - **Callbacks**: Simple, single-purpose handlers
+    - **Listeners**: Complex logic, multiple handlers, analytics
+    
+    ```typescript
+    const player = new AdPlayer({
+      // Simple callbacks for main logic
+      onComplete: () => resumeContent(),
+      onError: (err) => handleError(err)
+    });
+    
+    // Listener for analytics
+    player.on((event) => analytics.track(event));
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle errors gracefully">
+    ```typescript
+    player.on((event) => {
+      if (event.type === 'error') {
+        // Log error
+        console.error(event.data);
+        
+        // Always resume content
+        player.destroy();
+        mainVideo.play();
+      }
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Don't rely on event order">
+    Events may fire in unexpected order during edge cases. Always check player state:
+    
+    ```typescript
+    player.on((event) => {
+      const state = player.getState();
+      
+      if (state.status === PlaybackStatus.Completed) {
+        // Safe to assume ad is done
+      }
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Learn about all configuration options
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors and implement recovery strategies
+  </Card>
+  
+  <Card title="Platform Detection" icon="tv" href="/guides/platform-detection">
+    Detect platforms and handle remote controls
+  </Card>
+  
+  <Card title="Optimization" icon="gauge-high" href="/guides/optimization">
+    Optimize performance for Smart TVs
+  </Card>
+</CardGroup>

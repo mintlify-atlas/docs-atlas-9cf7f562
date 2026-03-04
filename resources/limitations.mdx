@@ -1,0 +1,310 @@
+---
+title: Limitations
+description: Known limitations and constraints of the Adgent SDK
+---
+
+<Warning>
+  Understanding these limitations is critical for successful Smart TV ad integration.
+</Warning>
+
+## No VPAID Support
+
+Adgent SDK **explicitly does not support** VPAID (Video Player-Ad Interface Definition) executables.
+
+### Why VPAID is Excluded
+
+VPAID is deliberately excluded for Smart TV platforms due to:
+
+<AccordionGroup>
+  <Accordion title="Performance Impact">
+    VPAID requires executing arbitrary JavaScript within the player context, which severely degrades performance on resource-constrained TV hardware.
+    
+    Smart TVs typically have:
+    - 512MB - 2GB RAM (vs 8GB+ on desktops)
+    - Slow ARM CPUs (vs x86 desktops)
+    - Limited GPU acceleration
+    
+    Running VPAID ads on these devices causes:
+    - Frame drops during playback
+    - UI freezing and stuttering
+    - Memory exhaustion crashes
+  </Accordion>
+  
+  <Accordion title="Stability Issues">
+    Third-party VPAID scripts are a common source of:
+    - **Memory leaks**: Especially problematic for long-running TV apps
+    - **Application crashes**: TV browsers have less resilient JavaScript engines
+    - **Unpredictable behavior**: VPAID code runs with full player access
+    
+    According to industry reports, VPAID is responsible for 60%+ of video ad crashes on Smart TV platforms.
+  </Accordion>
+  
+  <Accordion title="Security Concerns">
+    Executing unverified external code poses significant security risks:
+    - Data exfiltration from TV devices
+    - Unauthorized network requests
+    - Injection of malicious code
+    - Privacy violations (TV viewing data)
+    
+    Smart TV browsers lack many desktop security features (sandboxing, process isolation).
+  </Accordion>
+  
+  <Accordion title="Modern Alternatives Exist">
+    The industry has moved towards better solutions:
+    - **VAST 4.x**: Enhanced tracking without executable code
+    - **OMID (Open Measurement Interface Definition)**: Standardized measurement without VPAID
+    - **SIMID**: Secure alternative for interactive ads
+    
+    VPAID is considered legacy technology and is being deprecated by major platforms.
+  </Accordion>
+</AccordionGroup>
+
+### What Happens to VPAID Ads
+
+The SDK automatically filters out VPAID media files during media selection:
+
+```typescript
+// From src/core/VASTParser.ts:289-292
+const filteredFiles = mediaFiles.filter(file => {
+  // Skip VPAID
+  if (file.apiFramework?.toLowerCase() === 'vpaid') {
+    return false;
+  }
+  // ... rest of filtering logic
+});
+```
+
+If **only** VPAID media files are available:
+- The SDK will fire a `VASTErrorCode.WRAPPER_NO_ADS_VAST_RESPONSE` (303)
+- The `onError` callback will be triggered
+- Playback will not start
+
+<Tip>
+  Ensure your VAST responses include at least one non-VPAID media file (MP4/WebM) for Smart TV compatibility.
+</Tip>
+
+## Device Compatibility Constraints
+
+Smart TVs, especially older models (2016-2019), have strict hardware limitations.
+
+### Video Codec Requirements
+
+<CardGroup cols={2}>
+  <Card title="Recommended: H.264" icon="check">
+    **H.264 (AVC) Main Profile Level 4.1 or lower**
+    
+    - Maximum compatibility (99% of Smart TVs)
+    - Hardware-accelerated on all platforms
+    - Reliable across all brands and years
+  </Card>
+  
+  <Card title="Limited: HEVC (H.265)" icon="triangle-exclamation">
+    **Supported on newer models only**
+    
+    - 2018+ TVs: Usually supported
+    - 2016-2017 TVs: Often fails
+    - Hisense/Vidaa: Limited support
+    - May fall back to software decode (slow)
+  </Card>
+  
+  <Card title="Experimental: VP9" icon="flask">
+    **Widely supported but less reliable**
+    
+    - Chromium-based platforms: Good
+    - WebOS/Tizen: Varies by model year
+    - Less reliable for ad insertion than H.264
+  </Card>
+  
+  <Card title="Avoid: AV1" icon="xmark">
+    **Very limited Smart TV support**
+    
+    - Only on 2021+ high-end models
+    - Not hardware-accelerated on most TVs
+    - Will cause playback failures
+  </Card>
+</CardGroup>
+
+### Resolution Constraints
+
+| Resolution | Recommendation | Reason |
+|------------|----------------|--------|
+| **1920x1080 (1080p)** | ✅ Recommended | Best balance of quality and compatibility |
+| **1280x720 (720p)** | ✅ Safe fallback | Universal support, lower bandwidth |
+| **3840x2160 (4K)** | ⚠️ Penalized | High memory usage, UI stuttering, crashes |
+| **Higher than 4K** | ❌ Avoid | Will be rejected by SDK |
+
+<Warning>
+  The SDK's media file selection algorithm **actively penalizes** 4K ads to prevent crashes on budget TVs.
+</Warning>
+
+From `src/core/VASTParser.ts:302-305`:
+
+```typescript
+// Penalize 4K+ heavily (memory intensive on budget TVs)
+if (file.width && file.width >= 3840) {
+  score *= 0.3; // 70% penalty
+}
+```
+
+### Bitrate Guidelines
+
+```typescript
+// Recommended bitrate ranges
+const bitrates = {
+  safest: 1500,      // Budget TVs, slow WiFi
+  recommended: 2500, // Default (1080p quality)
+  highEnd: 4000,     // Premium TVs only
+  avoid: 8000        // Will cause buffering
+};
+```
+
+<Note>
+  Set `targetBitrate: 1500` if targeting 2016-2019 TV models or regions with slower internet.
+</Note>
+
+**Why bitrate matters on TVs:**
+- TV WiFi chips are often slow (2.4GHz only on older models)
+- Living room WiFi signal is typically weaker
+- TVs lack aggressive adaptive bitrate switching
+- Buffering during ads causes poor user experience
+
+### Audio Codec Requirements
+
+| Codec | Support | Notes |
+|-------|---------|-------|
+| **AAC-LC** | ✅ Universal | Use this for maximum compatibility |
+| **HE-AAC** | ✅ Common | Supported on most modern TVs |
+| **Dolby Digital (AC-3)** | ⚠️ Limited | Premium TVs only |
+| **Dolby Atmos** | ⚠️ Very Limited | 2020+ high-end models |
+
+### Container Format
+
+```typescript
+// Preference order (from SDK source)
+const containerPreference = [
+  'video/mp4',        // Best compatibility
+  'video/webm',       // Good on Chromium platforms
+  'video/x-matroska', // MKV - limited support
+];
+```
+
+<Tip>
+  Always provide MP4 (`video/mp4`) as the primary media file format.
+</Tip>
+
+## Memory Constraints
+
+Smart TVs have significantly less RAM than desktop browsers:
+
+| Device Type | Typical RAM | Impact |
+|-------------|-------------|--------|
+| Budget TV (2016-2019) | 512MB - 1GB | High memory pressure |
+| Mid-range TV (2020-2022) | 1.5GB - 2GB | Moderate constraints |
+| Premium TV (2023+) | 3GB - 4GB | Similar to low-end desktops |
+
+**Implications:**
+- **Avoid 4K ads**: Can consume 200MB+ of video buffer memory
+- **Limit concurrent requests**: Stick to SDK defaults (max 5 wrapper depth)
+- **Clean up promptly**: Call `sdk.destroy()` after ad completion
+
+```typescript
+// Good: Clean up after ad
+sdk.on(event => {
+  if (event.type === 'complete' || event.type === 'skip') {
+    sdk.destroy(); // Releases video element, buffers, listeners
+  }
+});
+```
+
+## Network Limitations
+
+<AccordionGroup>
+  <Accordion title="Slow VAST Response Times">
+    Smart TV network requests are slower than desktop:
+    - DNS resolution: 200-500ms (vs 20-50ms desktop)
+    - TLS handshake: 500-1000ms (vs 100-200ms desktop)
+    - HTTP request: 300-800ms (vs 50-150ms desktop)
+    
+    **Recommendation**: Set `timeout: 8000` or higher for VAST requests.
+  </Accordion>
+  
+  <Accordion title="Limited Concurrent Connections">
+    TV browsers limit concurrent HTTP connections:
+    - Typically 4-6 connections per domain (vs 10+ on desktop)
+    - Tracking pixels may queue up
+    
+    **The SDK uses `sendBeacon()`** to avoid blocking the main connection pool.
+  </Accordion>
+  
+  <Accordion title="No HTTP/3 Support">
+    Most Smart TV browsers don't support HTTP/3 (QUIC):
+    - Stuck on HTTP/1.1 or HTTP/2
+    - Higher latency on poor WiFi connections
+  </Accordion>
+</AccordionGroup>
+
+## Browser Limitations
+
+### JavaScript Engine Performance
+
+Smart TV browsers use older/slower JavaScript engines:
+
+| Platform | Engine | Performance |
+|----------|--------|-------------|
+| Tizen 4.0+ | JavaScriptCore | ~5x slower than desktop |
+| WebOS 3.0+ | V8 (older) | ~3x slower than desktop |
+| Vidaa | Custom | ~8x slower than desktop |
+
+**Implications:**
+- Avoid heavy JavaScript processing during ad playback
+- Minimize VAST wrapper chains (default limit: 5)
+- Use SDK's built-in parsers (optimized for TV)
+
+### Missing Web APIs
+
+Some modern Web APIs are unavailable:
+
+```typescript
+// May not be available on all platforms
+if (!navigator.sendBeacon) {
+  // SDK automatically falls back to fetch + Image pixel
+}
+
+if (!window.AbortController) {
+  // SDK provides polyfill for request cancellation
+}
+```
+
+<Note>
+  The SDK handles these fallbacks automatically—you don't need to check feature support yourself.
+</Note>
+
+## Best Practices for Compatibility
+
+<Steps>
+  <Step title="Use H.264 MP4">
+    Encode ads as H.264 (Main Profile, Level 4.1) in MP4 container
+  </Step>
+  
+  <Step title="Target 1080p">
+    Use 1920x1080 resolution with 2500 kbps bitrate
+  </Step>
+  
+  <Step title="Keep VAST simple">
+    Minimize wrapper chains and avoid VPAID
+  </Step>
+  
+  <Step title="Test on real devices">
+    Always test on actual Smart TV hardware, not just desktop browsers
+  </Step>
+  
+  <Step title="Monitor performance">
+    Track ad load times, buffering rates, and error codes across platforms
+  </Step>
+</Steps>
+
+## See Also
+
+- [Platform Support](/concepts/platform-support) - Platform-specific capabilities
+- [Optimization Guide](/guides/optimization) - Performance tuning
+- [Performance Metrics](/resources/performance) - Bundle size and benchmarks

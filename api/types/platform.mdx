@@ -1,0 +1,536 @@
+---
+title: "Platform Types"
+description: "Smart TV platform detection and device capability types"
+---
+
+Type definitions for detecting Smart TV platforms, handling remote control input, and querying device capabilities.
+
+## Platform
+
+Supported Smart TV platforms and streaming devices.
+
+```typescript
+enum Platform {
+  WebOS = 'webos',
+  Tizen = 'tizen',
+  Vidaa = 'vidaa',
+  WhaleOS = 'whaleos',
+  FireTV = 'firetv',
+  Roku = 'roku',
+  Xbox = 'xbox',
+  PlayStation = 'playstation',
+  AndroidTV = 'androidtv',
+  Vizio = 'vizio',
+  Generic = 'generic'
+}
+```
+
+<ResponseField name="WebOS" type="'webos'">
+  LG Smart TVs running webOS.
+</ResponseField>
+
+<ResponseField name="Tizen" type="'tizen'">
+  Samsung Smart TVs running Tizen OS.
+</ResponseField>
+
+<ResponseField name="Vidaa" type="'vidaa'">
+  Hisense Smart TVs running VIDAA OS.
+</ResponseField>
+
+<ResponseField name="WhaleOS" type="'whaleos'">
+  Smart TVs running WhaleOS (Whale browser-based platform).
+</ResponseField>
+
+<ResponseField name="FireTV" type="'firetv'">
+  Amazon Fire TV and Fire TV Stick devices.
+</ResponseField>
+
+<ResponseField name="Roku" type="'roku'">
+  Roku streaming devices and Roku TVs.
+</ResponseField>
+
+<ResponseField name="Xbox" type="'xbox'">
+  Microsoft Xbox consoles.
+</ResponseField>
+
+<ResponseField name="PlayStation" type="'playstation'">
+  Sony PlayStation consoles (PS4, PS5).
+</ResponseField>
+
+<ResponseField name="AndroidTV" type="'androidtv'">
+  Android TV devices including Google TV, Chromecast, and various TV manufacturers.
+</ResponseField>
+
+<ResponseField name="Vizio" type="'vizio'">
+  Vizio SmartCast TVs.
+</ResponseField>
+
+<ResponseField name="Generic" type="'generic'">
+  Fallback for unknown or standard web platforms.
+</ResponseField>
+
+---
+
+## KeyAction
+
+Remote control and gamepad key actions.
+
+```typescript
+enum KeyAction {
+  Enter = 'enter',
+  Back = 'back',
+  Left = 'left',
+  Right = 'right',
+  Up = 'up',
+  Down = 'down',
+  Play = 'play',
+  Pause = 'pause',
+  PlayPause = 'playPause',
+  Stop = 'stop',
+  FastForward = 'fastForward',
+  Rewind = 'rewind',
+  Menu = 'menu',
+  Info = 'info',
+  Red = 'red',
+  Green = 'green',
+  Yellow = 'yellow',
+  Blue = 'blue',
+  ChannelUp = 'channelUp',
+  ChannelDown = 'channelDown',
+  VolumeUp = 'volumeUp',
+  VolumeDown = 'volumeDown',
+  Mute = 'mute'
+}
+```
+
+Normalized key actions for Smart TV remote controls and game controllers.
+
+---
+
+## PlatformKeyMap
+
+Mapping of platform-specific key codes to normalized key actions.
+
+```typescript
+interface PlatformKeyMap {
+  [keyCode: number]: KeyAction;
+}
+```
+
+Maps raw numeric key codes to [KeyAction](#keyaction) enums. Each platform has different key code mappings.
+
+### Example
+
+```typescript
+const tizenKeyMap: PlatformKeyMap = {
+  13: KeyAction.Enter,
+  10009: KeyAction.Back,
+  37: KeyAction.Left,
+  // ...
+};
+```
+
+---
+
+## PlatformCapabilities
+
+Device capability flags for feature detection.
+
+```typescript
+interface PlatformCapabilities {
+  sendBeacon: boolean;
+  fetchKeepalive: boolean;
+  mutedAutoplayRequired: boolean;
+  fullscreen: boolean;
+  hardwareDecodeInfo: boolean;
+  hdr: boolean;
+  hdr10Plus: boolean;
+  dolbyVision: boolean;
+  dolbyAtmos: boolean;
+  hevc: boolean;
+  vp9: boolean;
+  av1: boolean;
+  maxResolution: '4k' | '1080p' | '720p' | 'unknown';
+  touch: boolean;
+  voice: boolean;
+}
+```
+
+<ResponseField name="sendBeacon" type="boolean">
+  Whether `navigator.sendBeacon()` API is supported for analytics.
+</ResponseField>
+
+<ResponseField name="fetchKeepalive" type="boolean">
+  Whether `fetch()` with `keepalive` option is supported.
+</ResponseField>
+
+<ResponseField name="mutedAutoplayRequired" type="boolean">
+  Whether autoplay requires the video to be muted (browser policy).
+</ResponseField>
+
+<ResponseField name="fullscreen" type="boolean">
+  Whether fullscreen API is supported.
+</ResponseField>
+
+<ResponseField name="hardwareDecodeInfo" type="boolean">
+  Whether hardware video decode capabilities can be queried.
+</ResponseField>
+
+<ResponseField name="hdr" type="boolean">
+  Whether HDR (High Dynamic Range) video is supported.
+</ResponseField>
+
+<ResponseField name="hdr10Plus" type="boolean">
+  Whether HDR10+ is supported.
+</ResponseField>
+
+<ResponseField name="dolbyVision" type="boolean">
+  Whether Dolby Vision HDR is supported.
+</ResponseField>
+
+<ResponseField name="dolbyAtmos" type="boolean">
+  Whether Dolby Atmos audio is supported.
+</ResponseField>
+
+<ResponseField name="hevc" type="boolean">
+  Whether HEVC/H.265 video codec is supported.
+</ResponseField>
+
+<ResponseField name="vp9" type="boolean">
+  Whether VP9 video codec is supported.
+</ResponseField>
+
+<ResponseField name="av1" type="boolean">
+  Whether AV1 video codec is supported.
+</ResponseField>
+
+<ResponseField name="maxResolution" type="'4k' | '1080p' | '720p' | 'unknown'">
+  Maximum supported video resolution.
+</ResponseField>
+
+<ResponseField name="touch" type="boolean">
+  Whether the device has touch input support.
+</ResponseField>
+
+<ResponseField name="voice" type="boolean">
+  Whether the device has voice control capabilities.
+</ResponseField>
+
+---
+
+## DeviceInfo
+
+Detailed device information.
+
+```typescript
+interface DeviceInfo {
+  platform: Platform;
+  model?: string;
+  manufacturer?: string;
+  osVersion?: string;
+  firmwareVersion?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  devicePixelRatio?: number;
+}
+```
+
+<ResponseField name="platform" type="Platform">
+  Detected platform. See [Platform](#platform) enum.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Device model identifier (e.g., "OLED55C1PUB" for LG C1).
+</ResponseField>
+
+<ResponseField name="manufacturer" type="string">
+  Device manufacturer (e.g., "LG", "Samsung", "Amazon").
+</ResponseField>
+
+<ResponseField name="osVersion" type="string">
+  Operating system version.
+</ResponseField>
+
+<ResponseField name="firmwareVersion" type="string">
+  Device firmware version.
+</ResponseField>
+
+<ResponseField name="screenWidth" type="number">
+  Screen width in pixels.
+</ResponseField>
+
+<ResponseField name="screenHeight" type="number">
+  Screen height in pixels.
+</ResponseField>
+
+<ResponseField name="devicePixelRatio" type="number">
+  Device pixel ratio (e.g., `1` for 1080p, `2` for 4K on 1080p logical screen).
+</ResponseField>
+
+---
+
+## IPlatformAdapter
+
+Platform adapter interface for device abstraction.
+
+```typescript
+interface IPlatformAdapter {
+  readonly platform: Platform;
+  readonly capabilities: PlatformCapabilities;
+  readonly deviceInfo: DeviceInfo;
+  
+  normalizeKeyCode(keyCode: number): KeyAction | null;
+  getKeyCodesForAction(action: KeyAction): number[];
+  isCodecSupported(codec: string): boolean;
+  openExternalLink(url: string): void;
+}
+```
+
+<ResponseField name="platform" type="Platform">
+  Current detected platform.
+</ResponseField>
+
+<ResponseField name="capabilities" type="PlatformCapabilities">
+  Platform capabilities. See [PlatformCapabilities](#platformcapabilities).
+</ResponseField>
+
+<ResponseField name="deviceInfo" type="DeviceInfo">
+  Device information. See [DeviceInfo](#deviceinfo).
+</ResponseField>
+
+<ResponseField name="normalizeKeyCode" type="(keyCode: number) => KeyAction | null">
+  Normalize a raw key code to a KeyAction.
+  
+  **Parameters:**
+  - `keyCode` - Raw keyboard/remote key code from KeyboardEvent
+  
+  **Returns:**
+  - Normalized [KeyAction](#keyaction) or `null` if unmapped
+</ResponseField>
+
+<ResponseField name="getKeyCodesForAction" type="(action: KeyAction) => number[]">
+  Get platform-specific key codes for a given action.
+  
+  **Parameters:**
+  - `action` - The key action to look up
+  
+  **Returns:**
+  - Array of key codes that map to this action
+</ResponseField>
+
+<ResponseField name="isCodecSupported" type="(codec: string) => boolean">
+  Check if a specific codec is supported on this platform.
+  
+  **Parameters:**
+  - `codec` - MIME type with codec (e.g., `video/mp4; codecs="hvc1"`)
+  
+  **Returns:**
+  - `true` if codec is supported, `false` otherwise
+</ResponseField>
+
+<ResponseField name="openExternalLink" type="(url: string) => void">
+  Open an external link in a new tab/window using platform-specific method.
+  
+  **Parameters:**
+  - `url` - The URL to open
+</ResponseField>
+
+### Example
+
+```typescript
+const adapter: IPlatformAdapter = getPlatformAdapter();
+
+// Normalize key codes
+window.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  if (action === KeyAction.Back) {
+    // Handle back button
+  }
+});
+
+// Check codec support
+if (adapter.isCodecSupported('video/mp4; codecs="hvc1"')) {
+  // Use HEVC media file
+}
+
+// Open external link
+adapter.openExternalLink('https://advertiser.com');
+```
+
+---
+
+## DEFAULT_KEY_CODES
+
+Default key code mappings for all supported platforms.
+
+```typescript
+const DEFAULT_KEY_CODES: Record<Platform, PlatformKeyMap>;
+```
+
+Provides default key code mappings for each platform. Maps [Platform](#platform) enum values to [PlatformKeyMap](#platformkeymap) objects.
+
+### Example Structure
+
+```typescript
+DEFAULT_KEY_CODES[Platform.Tizen] = {
+  13: KeyAction.Enter,
+  10009: KeyAction.Back,
+  37: KeyAction.Left,
+  38: KeyAction.Up,
+  39: KeyAction.Right,
+  40: KeyAction.Down,
+  415: KeyAction.Play,
+  // ...
+};
+```
+
+### Platform-Specific Key Codes
+
+<Accordion title="WebOS Key Codes">
+  - `461` - Back button (WebOS-specific)
+  - `415` - Play
+  - `19` - Pause
+  - `413` - Stop
+  - `417` - Fast Forward
+  - `412` - Rewind
+  - `457` - Info
+  - `403-406` - Color buttons (Red, Green, Yellow, Blue)
+</Accordion>
+
+<Accordion title="Tizen Key Codes">
+  - `10009` - Back button (Tizen-specific)
+  - `10252` - Play/Pause toggle
+  - `427-428` - Channel Up/Down
+  - `447-448` - Volume Up/Down
+  - `449` - Mute
+</Accordion>
+
+<Accordion title="Fire TV Key Codes">
+  - `4` - Android back button
+  - `85` - Play/Pause
+  - `126` - Play
+  - `127` - Pause
+  - `89` - Rewind
+  - `90` - Fast Forward
+  - `82` - Menu
+</Accordion>
+
+<Accordion title="Xbox Key Codes">
+  - `13` - A button (Enter)
+  - `27` - B button (Back)
+  - `195` - Menu button
+  - `196` - View button
+</Accordion>
+
+<Accordion title="PlayStation Key Codes">
+  - `13` - X button (Enter)
+  - `27` - Circle button (Back)
+  - D-pad: `37-40` (Left, Up, Right, Down)
+</Accordion>
+
+---
+
+## PLATFORM_DETECTION_PATTERNS
+
+Regex patterns for detecting platforms from User-Agent strings.
+
+```typescript
+const PLATFORM_DETECTION_PATTERNS: Record<Platform, RegExp[]>;
+```
+
+Provides regex patterns to detect each platform from `navigator.userAgent`. Maps [Platform](#platform) enum values to arrays of RegExp patterns.
+
+### Example Structure
+
+```typescript
+PLATFORM_DETECTION_PATTERNS[Platform.Tizen] = [
+  /Tizen/i,
+  /SMART-TV.*Samsung/i
+];
+
+PLATFORM_DETECTION_PATTERNS[Platform.WebOS] = [
+  /Web0S/i,
+  /WebOS/i,
+  /LG.*NetCast/i,
+  /LGE.*TV/i
+];
+```
+
+### Detection Patterns by Platform
+
+<ResponseField name="Tizen" type="RegExp[]">
+  - `/Tizen/i`
+  - `/SMART-TV.*Samsung/i`
+</ResponseField>
+
+<ResponseField name="WebOS" type="RegExp[]">
+  - `/Web0S/i`
+  - `/WebOS/i`
+  - `/LG.*NetCast/i`
+  - `/LGE.*TV/i`
+</ResponseField>
+
+<ResponseField name="Vidaa" type="RegExp[]">
+  - `/Vidaa/i`
+  - `/VIDAA/i`
+  - `/Hisense/i`
+</ResponseField>
+
+<ResponseField name="WhaleOS" type="RegExp[]">
+  - `/WhaleTV/i`
+  - `/Whale/i`
+</ResponseField>
+
+<ResponseField name="FireTV" type="RegExp[]">
+  - `/AFT/i` - Amazon Fire TV
+  - `/AFTS/i` - Fire TV Stick
+  - `/AFTM/i` - Fire TV models
+  - `/Amazon.*Fire/i`
+</ResponseField>
+
+<ResponseField name="Roku" type="RegExp[]">
+  - `/Roku/i`
+</ResponseField>
+
+<ResponseField name="Xbox" type="RegExp[]">
+  - `/Xbox/i`
+  - `/Edge.*Xbox/i`
+</ResponseField>
+
+<ResponseField name="PlayStation" type="RegExp[]">
+  - `/PlayStation/i`
+  - `/PS4/i`
+  - `/PS5/i`
+</ResponseField>
+
+<ResponseField name="AndroidTV" type="RegExp[]">
+  - `/Android.*TV/i`
+  - `/Chromecast/i`
+  - `/BRAVIA/i` - Sony TVs
+  - `/SHIELD/i` - NVIDIA Shield
+</ResponseField>
+
+<ResponseField name="Vizio" type="RegExp[]">
+  - `/VIZIO/i`
+  - `/SmartCast/i`
+</ResponseField>
+
+<ResponseField name="Generic" type="RegExp[]">
+  Empty array - fallback for all other platforms
+</ResponseField>
+
+### Usage Example
+
+```typescript
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent;
+  
+  for (const [platform, patterns] of Object.entries(PLATFORM_DETECTION_PATTERNS)) {
+    if (patterns.some(pattern => pattern.test(ua))) {
+      return platform as Platform;
+    }
+  }
+  
+  return Platform.Generic;
+}
+```

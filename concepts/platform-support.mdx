@@ -1,0 +1,542 @@
+---
+title: 'Platform Support'
+description: 'Multi-platform detection, capabilities, and remote control key mapping for Smart TVs'
+icon: 'tv'
+---
+
+Adgent SDK provides native support for major Smart TV platforms with automatic platform detection, capability discovery, and remote control key normalization.
+
+## Supported Platforms
+
+The SDK supports the following platforms out of the box:
+
+<CardGroup cols={2}>
+  <Card title="LG webOS" icon="tv">
+    webOS 3.0+ with native LG remote support
+  </Card>
+  <Card title="Samsung Tizen" icon="tv">
+    Tizen 4.0+ with Samsung remote key registration
+  </Card>
+  <Card title="Hisense Vidaa" icon="tv">
+    Vidaa 2.0+ lightweight implementation
+  </Card>
+  <Card title="Naver WhaleOS" icon="tv">
+    Whale browser-based Smart TV platform
+  </Card>
+</CardGroup>
+
+### Additional Platforms
+
+Extended support for streaming devices and game consoles:
+
+- **Amazon Fire TV** - Android-based streaming stick/box
+- **Roku** - Dedicated streaming platform
+- **Xbox** - Microsoft game console browser
+- **PlayStation** - Sony game console browser
+- **Android TV** - Google TV platform (Chromecast, Sony Bravia, NVIDIA Shield)
+- **Vizio SmartCast** - Vizio Smart TV platform
+- **Generic Web** - Fallback for standard browsers
+
+Platform enum definition: `src/types/platform.ts:7-19`
+
+## Platform Detection Logic
+
+Platform detection happens automatically when the SDK initializes. Detection uses a combination of:
+
+1. **Global Objects**: Check for platform-specific globals (e.g., `window.tizen`, `window.webOS`)
+2. **User Agent**: Regex pattern matching against `navigator.userAgent`
+3. **Fallback**: Defaults to `Generic` if no match is found
+
+### Detection Implementation
+
+```typescript
+private detectPlatform(): Platform {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return Platform.Generic;
+  }
+
+  const userAgent = navigator.userAgent;
+  const win = window as any;
+
+  // Check global objects first (most reliable)
+  if (win.tizen) {
+    return Platform.Tizen;
+  }
+
+  if (win.webOS || win.PalmSystem) {
+    return Platform.WebOS;
+  }
+
+  // Fall back to user agent pattern matching
+  for (const [platform, patterns] of Object.entries(PLATFORM_DETECTION_PATTERNS)) {
+    for (const pattern of patterns) {
+      if (pattern.test(userAgent)) {
+        return platform as Platform;
+      }
+    }
+  }
+
+  return Platform.Generic;
+}
+```
+
+Full implementation: `src/core/PlatformAdapter.ts:39-67`
+
+### Detection Patterns
+
+User agent regex patterns for each platform:
+
+| Platform | Patterns |
+|----------|----------|
+| **Tizen** | `/Tizen/i`, `/SMART-TV.*Samsung/i` |
+| **webOS** | `/Web0S/i`, `/WebOS/i`, `/LG.*NetCast/i`, `/LGE.*TV/i` |
+| **Vidaa** | `/Vidaa/i`, `/VIDAA/i`, `/Hisense/i` |
+| **WhaleOS** | `/WhaleTV/i`, `/Whale/i` |
+| **Fire TV** | `/AFT/i`, `/AFTS/i`, `/AFTM/i`, `/Amazon.*Fire/i` |
+| **Roku** | `/Roku/i` |
+| **Xbox** | `/Xbox/i`, `/Edge.*Xbox/i` |
+| **PlayStation** | `/PlayStation/i`, `/PS4/i`, `/PS5/i` |
+| **Android TV** | `/Android.*TV/i`, `/Chromecast/i`, `/BRAVIA/i`, `/SHIELD/i` |
+| **Vizio** | `/VIZIO/i`, `/SmartCast/i` |
+
+Pattern definitions: `src/types/platform.ts:294-344`
+
+<Tip>
+Use `getPlatformAdapter().platform` to get the detected platform name.
+</Tip>
+
+## Platform Capabilities
+
+Each platform has different hardware and software capabilities. The adapter exposes these as feature flags.
+
+### Capability Interface
+
+```typescript
+interface PlatformCapabilities {
+  // Network APIs
+  sendBeacon: boolean;              // navigator.sendBeacon() support
+  fetchKeepalive: boolean;          // fetch() with keepalive option
+  
+  // Video playback
+  mutedAutoplayRequired: boolean;   // Must use muted autoplay
+  fullscreen: boolean;              // Fullscreen API support
+  
+  // Hardware info
+  hardwareDecodeInfo: boolean;      // Access to hardware decode info
+  
+  // Video formats
+  hdr: boolean;                     // HDR playback
+  hdr10Plus: boolean;               // HDR10+ support
+  dolbyVision: boolean;             // Dolby Vision support
+  dolbyAtmos: boolean;              // Dolby Atmos audio
+  hevc: boolean;                    // HEVC/H.265 codec
+  vp9: boolean;                     // VP9 codec
+  av1: boolean;                     // AV1 codec
+  
+  // Resolution
+  maxResolution: '4k' | '1080p' | '720p' | 'unknown';
+  
+  // Input
+  touch: boolean;                   // Touchscreen support
+  voice: boolean;                   // Voice control support
+}
+```
+
+Type definition: `src/types/platform.ts:53-85`
+
+### Capability Detection Examples
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Check if Beacon API is available for tracking
+if (adapter.capabilities.sendBeacon) {
+  console.log('Using sendBeacon for tracking pixels');
+}
+
+// Check codec support
+if (adapter.capabilities.hevc) {
+  console.log('HEVC/H.265 supported, can use higher compression');
+}
+
+// Check HDR support
+if (adapter.capabilities.hdr) {
+  console.log('HDR playback available');
+}
+
+// Get maximum resolution
+const maxRes = adapter.capabilities.maxResolution;
+console.log(`Maximum supported resolution: ${maxRes}`);
+```
+
+### Platform-Specific Capabilities
+
+<Tabs>
+  <Tab title="Samsung Tizen">
+    ```typescript
+    {
+      sendBeacon: true,
+      hardwareDecodeInfo: true,
+      hdr: true,
+      hevc: true,
+      voice: true,
+      maxResolution: '4k'
+    }
+    ```
+    Implementation: `src/core/PlatformAdapter.ts:96-103`
+  </Tab>
+  
+  <Tab title="LG webOS">
+    ```typescript
+    {
+      sendBeacon: true,
+      hardwareDecodeInfo: true,
+      hdr: true,
+      dolbyVision: true,
+      dolbyAtmos: true,
+      hevc: true,
+      voice: true,
+      maxResolution: '4k'
+    }
+    ```
+    Implementation: `src/core/PlatformAdapter.ts:105-114`
+  </Tab>
+  
+  <Tab title="Generic Web">
+    ```typescript
+    {
+      sendBeacon: 'sendBeacon' in navigator,
+      fetchKeepalive: true,
+      mutedAutoplayRequired: true,
+      fullscreen: true,
+      hevc: false,  // Rare in browsers
+      vp9: true,    // Common in Chrome/Firefox
+      maxResolution: 'unknown'
+    }
+    ```
+    Implementation: `src/core/PlatformAdapter.ts:77-93`
+  </Tab>
+</Tabs>
+
+## Remote Control Key Mapping
+
+Each TV platform uses different key codes for the same remote control buttons. The adapter normalizes these to a common `KeyAction` enum.
+
+### Key Action Enum
+
+```typescript
+enum KeyAction {
+  // Navigation
+  Enter = 'enter',
+  Back = 'back',
+  Left = 'left',
+  Right = 'right',
+  Up = 'up',
+  Down = 'down',
+  
+  // Playback
+  Play = 'play',
+  Pause = 'pause',
+  PlayPause = 'playPause',
+  Stop = 'stop',
+  FastForward = 'fastForward',
+  Rewind = 'rewind',
+  
+  // Functions
+  Menu = 'menu',
+  Info = 'info',
+  
+  // Color buttons
+  Red = 'red',
+  Green = 'green',
+  Yellow = 'yellow',
+  Blue = 'blue',
+  
+  // Volume/Channel
+  ChannelUp = 'channelUp',
+  ChannelDown = 'channelDown',
+  VolumeUp = 'volumeUp',
+  VolumeDown = 'volumeDown',
+  Mute = 'mute'
+}
+```
+
+Enum definition: `src/types/platform.ts:22-46`
+
+### Key Code Normalization
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Enter) {
+    console.log('User pressed OK/Enter on remote');
+  }
+  
+  if (action === KeyAction.Back) {
+    console.log('User pressed Back button');
+  }
+});
+```
+
+Normalization method: `src/core/PlatformAdapter.ts:249-251`
+
+### Platform Key Code Examples
+
+Same button, different key codes across platforms:
+
+| Platform | Enter | Back | Play | Fast Forward |
+|----------|-------|------|------|-------------|
+| **Tizen** | 13 | 10009 | 415 | 417 |
+| **webOS** | 13 | 461 | 415 | 417 |
+| **Vidaa** | 13 | 8/27 | 415 | 417 |
+| **Fire TV** | 13 | 4 | 126 | 90 |
+| **Generic** | 13 | 27 | 80 (P) | - |
+
+Full key maps: `src/types/platform.ts:137-292`
+
+<Note>
+Tizen requires explicit key registration for media keys (Play, Pause, etc.). The SDK handles this automatically via `registerTizenKeys()`.
+</Note>
+
+### Tizen Key Registration
+
+Tizen apps must register media keys before they can be captured:
+
+```typescript
+public registerTizenKeys(): void {
+  if (this.platform !== Platform.Tizen) return;
+
+  const tizen = (window as any).tizen;
+  if (tizen?.tvinputdevice) {
+    const keys = [
+      'MediaPlay',
+      'MediaPause',
+      'MediaStop',
+      'MediaFastForward',
+      'MediaRewind',
+      'MediaPlayPause',
+      'ColorF0Red',
+      'ColorF1Green',
+      'ColorF2Yellow',
+      'ColorF3Blue',
+      'Info'
+    ];
+    keys.forEach((key) => {
+      try {
+        tizen.tvinputdevice.registerKey(key);
+      } catch {
+        // Key may already be registered
+      }
+    });
+  }
+}
+```
+
+Implementation: `src/core/PlatformAdapter.ts:283-310`
+
+This is called automatically during SDK initialization: `src/core/AdPlayer.ts:82-84`
+
+## Platform-Specific Attributes
+
+The adapter provides recommended video element attributes for each platform:
+
+```typescript
+const attrs = adapter.getVideoAttributes();
+// Returns:
+{
+  muted: true,
+  playsinline: true,
+  autoplay: true,
+  'webkit-playsinline': true,
+  'data-samsung-immersive': 'true',  // Tizen only
+  'data-lg-immersive': 'true'        // webOS only
+}
+```
+
+Implementation: `src/core/PlatformAdapter.ts:326-352`
+
+These attributes are automatically applied to the video element: `src/core/AdPlayer.ts:176-183`
+
+## Recommended Video Settings
+
+Each platform has different optimal settings for video playback:
+
+```typescript
+const settings = adapter.getRecommendedVideoSettings();
+```
+
+### Platform Settings Table
+
+| Platform | Max Bitrate | Preferred Codec | Max Resolution |
+|----------|-------------|-----------------|----------------|
+| **Tizen** | 15000 kbps | HEVC | 4K |
+| **webOS** | 15000 kbps | HEVC | 4K |
+| **Fire TV** | 10000 kbps | HEVC | 4K |
+| **Roku** | 8000 kbps | H.264 | 4K |
+| **Xbox** | 20000 kbps | HEVC | 4K |
+| **PlayStation** | 20000 kbps | HEVC | 4K |
+| **Generic** | 5000 kbps | H.264 | 1080p |
+
+Implementation: `src/core/PlatformAdapter.ts:356-400`
+
+<Warning>
+While high-end platforms support 4K, the SDK's media file selection algorithm penalizes 4K content for compatibility reasons. See [VAST Compliance](/concepts/vast-compliance#media-file-selection-algorithm) for details.
+</Warning>
+
+## Device Information
+
+The adapter provides device-specific information when available:
+
+```typescript
+const info = adapter.deviceInfo;
+
+console.log(info.platform);          // 'tizen'
+console.log(info.manufacturer);      // 'Samsung'
+console.log(info.model);             // 'UN65RU7100'
+console.log(info.osVersion);         // '5.5'
+console.log(info.screenWidth);       // 3840
+console.log(info.screenHeight);      // 2160
+console.log(info.devicePixelRatio);  // 1
+```
+
+Device info interface: `src/types/platform.ts:88-97`
+
+### Platform-Specific Device APIs
+
+<Tabs>
+  <Tab title="Tizen">
+    ```typescript
+    // Tizen provides device info via systeminfo API
+    if (window.tizen?.systeminfo) {
+      tizen.systeminfo.getPropertyValue('BUILD', (build) => {
+        info.model = build.model;
+        info.manufacturer = 'Samsung';
+      });
+    }
+    ```
+    Implementation: `src/core/PlatformAdapter.ts:186-195`
+  </Tab>
+  
+  <Tab title="webOS">
+    ```typescript
+    // webOS provides device info via webOSSystem
+    if (window.webOSSystem) {
+      const deviceInfo = window.webOSSystem.deviceInfo;
+      info.model = deviceInfo?.modelName;
+      info.manufacturer = 'LG';
+      info.osVersion = deviceInfo?.version;
+    }
+    ```
+    Implementation: `src/core/PlatformAdapter.ts:197-206`
+  </Tab>
+</Tabs>
+
+## Usage Examples
+
+### Basic Platform Detection
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+switch (adapter.platform) {
+  case 'tizen':
+    console.log('Running on Samsung Tizen TV');
+    break;
+  case 'webos':
+    console.log('Running on LG webOS TV');
+    break;
+  case 'generic':
+    console.log('Running on standard web browser');
+    break;
+}
+```
+
+### Capability-Based Logic
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Use Beacon API if available, fall back to fetch
+function fireTrackingPixel(url: string) {
+  if (adapter.capabilities.sendBeacon) {
+    navigator.sendBeacon(url);
+  } else {
+    fetch(url, { method: 'GET', keepalive: true });
+  }
+}
+
+// Adjust quality based on platform
+let targetBitrate = 2500; // Default
+if (adapter.capabilities.maxResolution === '4k') {
+  targetBitrate = 5000; // Higher quality for 4K TVs
+}
+```
+
+### Remote Control Handling
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Register Tizen keys if needed
+if (adapter.platform === 'tizen') {
+  adapter.registerTizenKeys();
+}
+
+// Handle key events
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Enter:
+      // Handle OK/Select
+      break;
+    case KeyAction.Back:
+      // Handle Back/Exit
+      break;
+    case KeyAction.PlayPause:
+      // Handle Play/Pause toggle
+      break;
+  }
+});
+```
+
+## Singleton Pattern
+
+The platform adapter uses a singleton pattern to ensure only one instance exists:
+
+```typescript
+let platformAdapterInstance: PlatformAdapter | null = null;
+
+export function getPlatformAdapter(): PlatformAdapter {
+  if (!platformAdapterInstance) {
+    platformAdapterInstance = new PlatformAdapter();
+  }
+  return platformAdapterInstance;
+}
+```
+
+Implementation: `src/core/PlatformAdapter.ts:452-462`
+
+This prevents duplicate platform detection and ensures consistent behavior across the SDK.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="VAST Compliance" icon="video" href="/concepts/vast-compliance">
+    Learn about VAST parsing and media selection
+  </Card>
+  <Card title="Nuclear Mute Strategy" icon="volume-xmark" href="/concepts/nuclear-mute-strategy">
+    Understand the autoplay strategy for Smart TVs
+  </Card>
+</CardGroup>

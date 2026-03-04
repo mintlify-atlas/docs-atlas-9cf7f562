@@ -1,0 +1,420 @@
+---
+title: "Player Types"
+description: "Type definitions for AdPlayer configuration, state, and events"
+---
+
+## AdPlayerConfig
+
+Configuration options for initializing the AdPlayer SDK.
+
+```typescript
+interface AdPlayerConfig {
+  container: HTMLElement;
+  vastUrl: string;
+  targetBitrate?: number;
+  maxWrapperDepth?: number;
+  timeout?: number;
+  debug?: boolean;
+  skipButtonText?: string;
+  skipOffset?: number;
+  onComplete?: () => void;
+  onError?: (error: AdError) => void;
+  onStart?: () => void;
+  onProgress?: (progress: AdProgress) => void;
+  onSkip?: () => void;
+  onClick?: (clickThroughUrl: string) => void;
+  onPause?: () => void;
+  onResume?: () => void;
+  customStartOverlay?: HTMLElement;
+  onClose?: () => void;
+}
+```
+
+<ResponseField name="container" type="HTMLElement" required>
+  Container element to render the ad player into. The player will create a video element and UI overlay within this container.
+</ResponseField>
+
+<ResponseField name="vastUrl" type="string" required>
+  VAST tag URL to fetch. Supports VAST 4.x specification.
+</ResponseField>
+
+<ResponseField name="targetBitrate" type="number">
+  Target bitrate in kbps for media file selection. Default: `2500` (approximately 1080p quality)
+</ResponseField>
+
+<ResponseField name="maxWrapperDepth" type="number">
+  Maximum VAST wrapper depth to follow. Prevents infinite wrapper chains. Default: `5`
+</ResponseField>
+
+<ResponseField name="timeout" type="number">
+  Request timeout in milliseconds for VAST fetching and media loading. Default: `10000`
+</ResponseField>
+
+<ResponseField name="debug" type="boolean">
+  Enable debug logging to console. Default: `false`
+</ResponseField>
+
+<ResponseField name="skipButtonText" type="string">
+  Custom text for the skip button. Default behavior shows countdown and "Skip Ad" text.
+</ResponseField>
+
+<ResponseField name="skipOffset" type="number">
+  Skip offset override in seconds. Set to `0` to disable skipping entirely. If not set, uses the skip offset from VAST.
+</ResponseField>
+
+<ResponseField name="onComplete" type="() => void">
+  Callback invoked when ad playback completes successfully.
+</ResponseField>
+
+<ResponseField name="onError" type="(error: AdError) => void">
+  Callback invoked when an error occurs during ad loading or playback.
+</ResponseField>
+
+<ResponseField name="onStart" type="() => void">
+  Callback invoked when ad starts playing for the first time.
+</ResponseField>
+
+<ResponseField name="onProgress" type="(progress: AdProgress) => void">
+  Callback invoked periodically during playback with current progress information.
+</ResponseField>
+
+<ResponseField name="onSkip" type="() => void">
+  Callback invoked when user skips the ad.
+</ResponseField>
+
+<ResponseField name="onClick" type="(clickThroughUrl: string) => void">
+  Callback invoked when user clicks the ad. Receives the click-through URL from VAST.
+</ResponseField>
+
+<ResponseField name="onPause" type="() => void">
+  Callback invoked when ad is paused.
+</ResponseField>
+
+<ResponseField name="onResume" type="() => void">
+  Callback invoked when ad resumes from pause.
+</ResponseField>
+
+<ResponseField name="customStartOverlay" type="HTMLElement">
+  Custom "Start Ad" overlay UI element for autoplay fallback scenarios. Displayed when browser blocks autoplay.
+</ResponseField>
+
+<ResponseField name="onClose" type="() => void">
+  Callback invoked when user triggers Back or Exit key action on Smart TV platforms.
+</ResponseField>
+
+### Example
+
+```typescript
+const config: AdPlayerConfig = {
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 3000,
+  skipOffset: 5,
+  debug: true,
+  onStart: () => console.log('Ad started'),
+  onComplete: () => console.log('Ad completed'),
+  onError: (error) => console.error('Ad error:', error)
+};
+```
+
+---
+
+## AdPlayerState
+
+Current state of the ad player.
+
+```typescript
+interface AdPlayerState {
+  status: PlaybackStatus;
+  currentTime: number;
+  duration: number;
+  muted: boolean;
+  volume: number;
+  canSkip: boolean;
+  skipCountdown: number;
+  mediaFile: MediaFile | null;
+  error: AdError | null;
+}
+```
+
+<ResponseField name="status" type="PlaybackStatus">
+  Current playback status. See [PlaybackStatus](#playbackstatus) enum.
+</ResponseField>
+
+<ResponseField name="currentTime" type="number">
+  Current playback time in seconds.
+</ResponseField>
+
+<ResponseField name="duration" type="number">
+  Total duration of the ad in seconds.
+</ResponseField>
+
+<ResponseField name="muted" type="boolean">
+  Whether the ad is currently muted.
+</ResponseField>
+
+<ResponseField name="volume" type="number">
+  Current volume level from 0 (muted) to 1 (full volume).
+</ResponseField>
+
+<ResponseField name="canSkip" type="boolean">
+  Whether the skip button is currently available to the user.
+</ResponseField>
+
+<ResponseField name="skipCountdown" type="number">
+  Seconds remaining until skip becomes available. `0` when skip is available.
+</ResponseField>
+
+<ResponseField name="mediaFile" type="MediaFile | null">
+  Selected media file currently being played. See [MediaFile](/api/types/vast#mediafile) type.
+</ResponseField>
+
+<ResponseField name="error" type="AdError | null">
+  Last error that occurred, if any. See [AdError](#aderror) interface.
+</ResponseField>
+
+---
+
+## PlaybackStatus
+
+Enum representing the current playback state.
+
+```typescript
+enum PlaybackStatus {
+  Idle = 'idle',
+  Loading = 'loading',
+  Ready = 'ready',
+  Playing = 'playing',
+  Paused = 'paused',
+  Completed = 'completed',
+  Error = 'error',
+  WaitingForInteraction = 'waiting_for_interaction'
+}
+```
+
+<ResponseField name="Idle" type="'idle'">
+  Player is initialized but no ad has been loaded.
+</ResponseField>
+
+<ResponseField name="Loading" type="'loading'">
+  Player is fetching VAST or loading media.
+</ResponseField>
+
+<ResponseField name="Ready" type="'ready'">
+  Media is loaded and ready to play.
+</ResponseField>
+
+<ResponseField name="Playing" type="'playing'">
+  Ad is currently playing.
+</ResponseField>
+
+<ResponseField name="Paused" type="'paused'">
+  Ad playback is paused.
+</ResponseField>
+
+<ResponseField name="Completed" type="'completed'">
+  Ad playback has completed successfully.
+</ResponseField>
+
+<ResponseField name="Error" type="'error'">
+  An error occurred during loading or playback.
+</ResponseField>
+
+<ResponseField name="WaitingForInteraction" type="'waiting_for_interaction'">
+  Autoplay was blocked; waiting for user interaction to start playback.
+</ResponseField>
+
+---
+
+## AdProgress
+
+Progress event data emitted during playback.
+
+```typescript
+interface AdProgress {
+  currentTime: number;
+  duration: number;
+  percentage: number;
+  quartile: 0 | 1 | 2 | 3 | 4;
+}
+```
+
+<ResponseField name="currentTime" type="number">
+  Current playback time in seconds.
+</ResponseField>
+
+<ResponseField name="duration" type="number">
+  Total duration in seconds.
+</ResponseField>
+
+<ResponseField name="percentage" type="number">
+  Playback progress as a percentage (0-100).
+</ResponseField>
+
+<ResponseField name="quartile" type="0 | 1 | 2 | 3 | 4">
+  Current quartile milestone:
+  - `0` - Start
+  - `1` - First quartile (25%)
+  - `2` - Midpoint (50%)
+  - `3` - Third quartile (75%)
+  - `4` - Complete (100%)
+</ResponseField>
+
+---
+
+## AdError
+
+Error structure with VAST error code and details.
+
+```typescript
+interface AdError {
+  code: VASTErrorCode | number;
+  message: string;
+  details?: string;
+  recoverable: boolean;
+}
+```
+
+<ResponseField name="code" type="VASTErrorCode | number">
+  Error code. Uses standard [VASTErrorCode](/api/types/vast#vasterrorcode) values when applicable, or custom numeric codes.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable error message.
+</ResponseField>
+
+<ResponseField name="details" type="string">
+  Additional error details or stack trace information.
+</ResponseField>
+
+<ResponseField name="recoverable" type="boolean">
+  Whether the error is recoverable and playback can be retried.
+</ResponseField>
+
+### Example
+
+```typescript
+const error: AdError = {
+  code: VASTErrorCode.MEDIA_NOT_SUPPORTED,
+  message: 'No supported media files found',
+  details: 'Available codecs: video/webm, Required: video/mp4',
+  recoverable: false
+};
+```
+
+---
+
+## AdPlayerEvent
+
+Union type representing all events emitted by the player.
+
+```typescript
+type AdPlayerEvent = 
+  | { type: 'loaded' }
+  | { type: 'start' }
+  | { type: 'progress'; data: AdProgress }
+  | { type: 'quartile'; data: { quartile: TrackingEventType } }
+  | { type: 'complete' }
+  | { type: 'skip' }
+  | { type: 'click'; data: { url: string } }
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'mute' }
+  | { type: 'unmute' }
+  | { type: 'error'; data: AdError }
+  | { type: 'destroy' };
+```
+
+<ResponseField name="loaded" type="{ type: 'loaded' }">
+  VAST has been loaded and media is ready.
+</ResponseField>
+
+<ResponseField name="start" type="{ type: 'start' }">
+  Ad playback has started.
+</ResponseField>
+
+<ResponseField name="progress" type="{ type: 'progress'; data: AdProgress }">
+  Playback progress update. Emitted periodically with current progress data.
+</ResponseField>
+
+<ResponseField name="quartile" type="{ type: 'quartile'; data: { quartile: TrackingEventType } }">
+  Quartile milestone reached (firstQuartile, midpoint, thirdQuartile).
+</ResponseField>
+
+<ResponseField name="complete" type="{ type: 'complete' }">
+  Ad playback completed successfully.
+</ResponseField>
+
+<ResponseField name="skip" type="{ type: 'skip' }">
+  User skipped the ad.
+</ResponseField>
+
+<ResponseField name="click" type="{ type: 'click'; data: { url: string } }">
+  User clicked the ad. Contains the click-through URL.
+</ResponseField>
+
+<ResponseField name="pause" type="{ type: 'pause' }">
+  Ad playback was paused.
+</ResponseField>
+
+<ResponseField name="resume" type="{ type: 'resume' }">
+  Ad playback resumed from pause.
+</ResponseField>
+
+<ResponseField name="mute" type="{ type: 'mute' }">
+  Ad was muted.
+</ResponseField>
+
+<ResponseField name="unmute" type="{ type: 'unmute' }">
+  Ad was unmuted.
+</ResponseField>
+
+<ResponseField name="error" type="{ type: 'error'; data: AdError }">
+  An error occurred. Contains error details.
+</ResponseField>
+
+<ResponseField name="destroy" type="{ type: 'destroy' }">
+  Player instance was destroyed.
+</ResponseField>
+
+### Example
+
+```typescript
+player.addEventListener((event: AdPlayerEvent) => {
+  switch (event.type) {
+    case 'progress':
+      console.log(`Progress: ${event.data.percentage}%`);
+      break;
+    case 'error':
+      console.error('Error:', event.data.message);
+      break;
+    case 'click':
+      console.log('Ad clicked:', event.data.url);
+      break;
+  }
+});
+```
+
+---
+
+## AdPlayerEventListener
+
+Type definition for event listener callbacks.
+
+```typescript
+type AdPlayerEventListener = (event: AdPlayerEvent) => void;
+```
+
+Callback function that receives [AdPlayerEvent](#adplayerevent) objects. Used with the player's event system.
+
+### Example
+
+```typescript
+const listener: AdPlayerEventListener = (event) => {
+  if (event.type === 'complete') {
+    console.log('Ad playback finished');
+  }
+};
+
+player.addEventListener(listener);
+```

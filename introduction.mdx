@@ -1,0 +1,93 @@
+---
+title: Introduction
+description: Learn about Adgent SDK - a lightweight, framework-agnostic VAST Player SDK built specifically for Smart TV platforms
+---
+
+## What is Adgent SDK?
+
+Adgent SDK is a high-performance, lightweight VAST (Video Ad Serving Template) player SDK designed specifically for Smart TV platforms. It provides a robust foundation for displaying video advertisements with full VAST 4.x compliance while maintaining a minimal footprint of under 20KB gzipped.
+
+<Note>
+Adgent SDK is framework-agnostic and works with any JavaScript/TypeScript project, making it perfect for Smart TV apps built with React, Vue, vanilla JavaScript, or any other framework.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="VAST 4.x Compliance" icon="check-circle">
+    Full wrapper resolution, tracking events, and intelligent media file selection based on bitrate and device capabilities
+  </Card>
+  
+  <Card title="Smart TV Optimized" icon="tv">
+    Native adapters for WebOS, Tizen, Vidaa, WhaleOS with platform-specific optimizations and remote control support
+  </Card>
+  
+  <Card title="Lightweight" icon="feather">
+    Under 20KB gzipped with only one dependency (fast-xml-parser), ensuring fast load times on TV hardware
+  </Card>
+  
+  <Card title="Fault Tolerant" icon="shield">
+    Nuclear Mute autoplay strategy with soft-fail recovery mechanisms to handle TV platform quirks
+  </Card>
+</CardGroup>
+
+## Why Use Adgent SDK?
+
+### Smart TV Optimization
+
+Unlike generic web video players, Adgent SDK is purpose-built for Smart TV constraints:
+
+- **Limited Processing Power**: Optimized for TV hardware from 2016+ with minimal CPU/memory overhead
+- **Remote Control Navigation**: Built-in focus management and key code normalization across platforms
+- **Network Constraints**: Intelligent bitrate selection (default 2500kbps for 1080p) to prevent buffering on TV WiFi
+- **Autoplay Handling**: Nuclear Mute strategy (muted + playsinline + autoplay) maximizes playback success rates
+
+### VAST 4.x Compliance
+
+Full support for modern VAST specifications:
+
+- Wrapper chain resolution up to 5 levels deep
+- Tracking pixels for impressions, quartiles, completion, and custom events
+- Smart media file selection based on codec compatibility (H.264 preferred, filters out VPAID)
+- Macro replacement for dynamic tracking URLs
+
+### Zero Framework Dependencies
+
+Works seamlessly with any JavaScript/TypeScript project:
+
+```typescript
+// React
+import { AdgentSDK } from 'adgent-sdk';
+
+// Vue
+import { AdgentSDK } from 'adgent-sdk';
+
+// Vanilla JS
+const { AdgentSDK } = require('adgent-sdk');
+```
+
+<Warning>
+**No VPAID Support**: Adgent SDK explicitly excludes VPAID executables for performance, stability, and security reasons on Smart TV platforms. VPAID can cause memory leaks and crashes on resource-constrained TV hardware.
+</Warning>
+
+## Platform Support
+
+| Platform | Version | Status |
+|----------|---------|--------|
+| **WebOS** | 3.0+ | ✅ Fully Supported |
+| **Tizen** | 4.0+ | ✅ Fully Supported |
+| **Vidaa** | 2.0+ | ✅ Fully Supported |
+| **WhaleOS** | 1.0+ | ✅ Fully Supported |
+| **Generic Web** | Modern browsers | ✅ Fully Supported |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Adgent SDK via npm, yarn, or pnpm
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get your first ad playing in 5 minutes
+  </Card>
+</CardGroup>

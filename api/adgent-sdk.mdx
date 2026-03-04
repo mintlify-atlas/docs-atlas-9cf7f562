@@ -1,0 +1,330 @@
+---
+title: 'AdgentSDK'
+description: 'Core video ad player with fault-tolerant playback for Smart TV platforms'
+icon: 'play'
+---
+
+## Overview
+
+The `AdgentSDK` class (alias of `AdPlayer`) is the main entry point for playing video ads on Smart TV platforms. It implements a "Nuclear Mute" strategy with muted, playsinline, and autoplay attributes for maximum compatibility, and includes soft-fail autoplay with interactive overlays when needed.
+
+<Note>
+`AdgentSDK` and `AdPlayer` are the same class - `AdgentSDK` is exported as an alias for convenience.
+</Note>
+
+## Features
+
+- **Nuclear Mute Strategy**: Applies muted + playsinline + autoplay for maximum TV compatibility
+- **Soft-fail Autoplay**: Catches play() rejection and shows interactive overlay instead of crashing
+- **Focus Management**: Captures remote control keys during ad playback
+- **VAST Parsing**: Automatic wrapper resolution and tracking pixel firing
+- **Skip Controls**: Configurable skip button with countdown
+- **Progress Tracking**: Quartile events and time-based progress callbacks
+
+## Constructor
+
+```typescript
+import { AdgentSDK } from 'adgent-sdk';
+
+const sdk = new AdgentSDK(config);
+```
+
+<ParamField path="config" type="AdPlayerConfig" required>
+  Configuration object for the ad player
+  
+  <Expandable title="properties">
+    <ParamField path="container" type="HTMLElement" required>
+      DOM element to render the ad player into
+    </ParamField>
+    
+    <ParamField path="vastUrl" type="string" required>
+      URL to the VAST XML document
+    </ParamField>
+    
+    <ParamField path="targetBitrate" type="number" default="2500">
+      Target bitrate in kbps for media file selection (prefers 1080p/720p over 4K)
+    </ParamField>
+    
+    <ParamField path="maxWrapperDepth" type="number" default="5">
+      Maximum depth for resolving VAST wrapper chains
+    </ParamField>
+    
+    <ParamField path="timeout" type="number" default="10000">
+      Request timeout in milliseconds for VAST fetching
+    </ParamField>
+    
+    <ParamField path="skipOffset" type="number">
+      Time in seconds before skip button becomes available (overrides VAST skipoffset)
+    </ParamField>
+    
+    <ParamField path="skipButtonText" type="string" default="'Skip Ad'">
+      Text to display on the skip button when available
+    </ParamField>
+    
+    <ParamField path="debug" type="boolean" default="false">
+      Enable debug logging to console
+    </ParamField>
+    
+    <ParamField path="customStartOverlay" type="HTMLElement">
+      Custom overlay element to show when autoplay fails
+    </ParamField>
+    
+    <ParamField path="onStart" type="() => void">
+      Callback fired when ad playback starts
+    </ParamField>
+    
+    <ParamField path="onComplete" type="() => void">
+      Callback fired when ad completes
+    </ParamField>
+    
+    <ParamField path="onSkip" type="() => void">
+      Callback fired when user skips the ad
+    </ParamField>
+    
+    <ParamField path="onError" type="(error: AdError) => void">
+      Callback fired when an error occurs
+    </ParamField>
+    
+    <ParamField path="onProgress" type="(progress: AdProgress) => void">
+      Callback fired on time updates during playback
+    </ParamField>
+    
+    <ParamField path="onClick" type="(url: string) => void">
+      Callback fired when user clicks the ad
+    </ParamField>
+    
+    <ParamField path="onClose" type="() => void">
+      Callback fired when user presses back button (if not provided, back will skip)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Methods
+
+### init()
+
+Initialize the SDK: fetch VAST, create video element, and attempt autoplay.
+
+```typescript
+await sdk.init();
+```
+
+**Returns**: `Promise<void>`
+
+**Throws**: `AdError` if VAST parsing fails or no suitable media file is found
+
+**Process**:
+1. Fetches and parses VAST XML
+2. Selects best media file based on targetBitrate
+3. Creates video element with Nuclear Mute attributes
+4. Attempts autoplay (falls back to interactive overlay on failure)
+5. Fires impression pixels when playback starts
+
+### skip()
+
+Skip the ad (only works if `canSkip` is true in state).
+
+```typescript
+sdk.skip();
+```
+
+Fires the `skip` tracking event and destroys the player.
+
+### mute()
+
+Mute the video and fire mute tracking.
+
+```typescript
+sdk.mute();
+```
+
+### unmute()
+
+Unmute the video and fire unmute tracking.
+
+```typescript
+sdk.unmute();
+```
+
+<Note>
+By default, ads start muted due to the Nuclear Mute strategy. Call `unmute()` after playback starts if you want audio.
+</Note>
+
+### on()
+
+Add an event listener for player events.
+
+```typescript
+const unsubscribe = sdk.on((event) => {
+  console.log('Event:', event.type, event.data);
+});
+
+// Later: remove listener
+unsubscribe();
+```
+
+**Parameters**:
+- `listener: AdPlayerEventListener` - Function to call on each event
+
+**Returns**: `() => void` - Unsubscribe function
+
+**Event Types**:
+- `loaded` - Video metadata loaded
+- `start` - Playback started
+- `progress` - Time update (includes currentTime, duration, percentage, quartile)
+- `quartile` - Quartile reached (firstQuartile, midpoint, thirdQuartile)
+- `pause` - Playback paused
+- `resume` - Playback resumed
+- `complete` - Ad completed
+- `skip` - Ad skipped
+- `error` - Error occurred
+- `click` - Ad clicked
+- `mute` - Video muted
+- `unmute` - Video unmuted
+- `destroy` - Player destroyed
+
+### getState()
+
+Get the current player state.
+
+```typescript
+const state = sdk.getState();
+console.log('Status:', state.status);
+console.log('Can skip:', state.canSkip);
+```
+
+**Returns**: `AdPlayerState`
+
+```typescript
+interface AdPlayerState {
+  status: PlaybackStatus; // Idle | Loading | Ready | Playing | Paused | Completed | Error | WaitingForInteraction
+  currentTime: number;
+  duration: number;
+  muted: boolean;
+  volume: number;
+  canSkip: boolean;
+  skipCountdown: number;
+  mediaFile: MediaFile | null;
+  error: AdError | null;
+}
+```
+
+### destroy()
+
+Clean up all resources and remove the player from the DOM.
+
+```typescript
+sdk.destroy();
+```
+
+Removes event listeners, video element, overlays, and resets internal state.
+
+## Example Usage
+
+### Basic Setup
+
+```typescript
+import { AdgentSDK } from 'adgent-sdk';
+
+const container = document.getElementById('ad-container')!;
+
+const sdk = new AdgentSDK({
+  container,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 2500,
+  skipOffset: 5,
+  debug: true,
+  onStart: () => console.log('Ad started'),
+  onComplete: () => {
+    console.log('Ad completed');
+    // Resume main content
+  },
+  onError: (error) => {
+    console.error('Ad error:', error);
+    // Handle error, resume content
+  }
+});
+
+await sdk.init();
+```
+
+### With Event Listener
+
+```typescript
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+// Listen to all events
+sdk.on((event) => {
+  switch (event.type) {
+    case 'start':
+      console.log('Ad playback started');
+      break;
+    case 'progress':
+      const { currentTime, duration, percentage } = event.data;
+      console.log(`Progress: ${percentage.toFixed(1)}%`);
+      break;
+    case 'quartile':
+      console.log('Quartile:', event.data.quartile);
+      break;
+    case 'complete':
+      console.log('Ad completed');
+      break;
+    case 'error':
+      console.error('Error:', event.data.message);
+      break;
+  }
+});
+
+await sdk.init();
+```
+
+### Unmuting After Start
+
+```typescript
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  onStart: () => {
+    // Unmute once playback has successfully started
+    sdk.unmute();
+  }
+});
+
+await sdk.init();
+```
+
+### Manual Cleanup
+
+```typescript
+const sdk = new AdgentSDK({ /* config */ });
+
+try {
+  await sdk.init();
+} catch (error) {
+  console.error('Failed to initialize:', error);
+  sdk.destroy();
+}
+
+// Later, when user navigates away
+window.addEventListener('beforeunload', () => {
+  sdk.destroy();
+});
+```
+
+## Related Types
+
+- [AdPlayerConfig](/api/types/ad-player-config)
+- [AdPlayerState](/api/types/ad-player-state)
+- [AdPlayerEvent](/api/types/ad-player-event)
+- [AdError](/api/types/ad-error)
+- [PlaybackStatus](/api/types/playback-status)
+
+## See Also
+
+- [AdPlayer](/api/ad-player) - Same class, different name
+- [VASTParser](/api/vast-parser) - VAST XML parsing
+- [AdTracker](/api/ad-tracker) - Tracking pixel management
+- [PlatformAdapter](/api/platform-adapter) - Platform detection and key handling

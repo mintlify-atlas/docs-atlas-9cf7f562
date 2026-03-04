@@ -1,0 +1,722 @@
+---
+title: Examples
+description: Complete working examples for common Adgent SDK use cases
+---
+
+## Basic Setup
+
+The simplest way to play a video ad:
+
+```typescript
+import { AdgentSDK } from 'adgent-sdk';
+
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 2500,
+  onComplete: () => {
+    console.log('Ad completed successfully');
+  },
+  onError: (err) => {
+    console.error('Ad error:', err);
+  }
+});
+
+await sdk.init();
+await sdk.play();
+```
+
+## Pre-Roll Ad Integration
+
+Play an ad before main content:
+
+```typescript
+import { AdgentSDK } from 'adgent-sdk';
+
+class VideoPlayer {
+  private contentVideo: HTMLVideoElement;
+  private adContainer: HTMLElement;
+  private adSDK: AdgentSDK | null = null;
+
+  constructor(
+    contentVideo: HTMLVideoElement,
+    adContainer: HTMLElement
+  ) {
+    this.contentVideo = contentVideo;
+    this.adContainer = adContainer;
+  }
+
+  async playWithPreRoll(vastUrl: string) {
+    try {
+      // Hide content video, show ad container
+      this.contentVideo.style.display = 'none';
+      this.adContainer.style.display = 'block';
+
+      // Initialize ad SDK
+      this.adSDK = new AdgentSDK({
+        container: this.adContainer,
+        vastUrl,
+        targetBitrate: 2500,
+        onComplete: () => this.onAdComplete(),
+        onSkip: () => this.onAdComplete(),
+        onError: (err) => this.onAdError(err)
+      });
+
+      await this.adSDK.init();
+      await this.adSDK.play();
+    } catch (error) {
+      console.error('Failed to play pre-roll:', error);
+      this.onAdError(error);
+    }
+  }
+
+  private onAdComplete() {
+    // Cleanup ad SDK
+    this.adSDK?.destroy();
+    this.adSDK = null;
+
+    // Show content, hide ad container
+    this.adContainer.style.display = 'none';
+    this.contentVideo.style.display = 'block';
+
+    // Start main content
+    this.contentVideo.play();
+  }
+
+  private onAdError(error: any) {
+    console.error('Ad failed, resuming content:', error);
+    this.onAdComplete(); // Graceful fallback
+  }
+}
+
+// Usage
+const player = new VideoPlayer(
+  document.getElementById('content-video') as HTMLVideoElement,
+  document.getElementById('ad-container') as HTMLElement
+);
+
+await player.playWithPreRoll('https://example.com/vast.xml');
+```
+
+## Mid-Roll Ads
+
+Insert ads at specific content timestamps:
+
+```typescript
+class MidRollManager {
+  private contentVideo: HTMLVideoElement;
+  private adContainer: HTMLElement;
+  private adBreaks: Array<{ time: number; vastUrl: string }>;
+  private firedBreaks = new Set<number>();
+
+  constructor(
+    contentVideo: HTMLVideoElement,
+    adContainer: HTMLElement,
+    adBreaks: Array<{ time: number; vastUrl: string }>
+  ) {
+    this.contentVideo = contentVideo;
+    this.adContainer = adContainer;
+    this.adBreaks = adBreaks;
+
+    // Listen for content time updates
+    this.contentVideo.addEventListener('timeupdate', () => {
+      this.checkAdBreaks();
+    });
+  }
+
+  private checkAdBreaks() {
+    const currentTime = this.contentVideo.currentTime;
+
+    for (const adBreak of this.adBreaks) {
+      // Check if we've reached an ad break that hasn't fired yet
+      if (
+        currentTime >= adBreak.time &&
+        !this.firedBreaks.has(adBreak.time)
+      ) {
+        this.firedBreaks.add(adBreak.time);
+        this.playMidRoll(adBreak.vastUrl);
+        break; // Only play one ad at a time
+      }
+    }
+  }
+
+  private async playMidRoll(vastUrl: string) {
+    // Pause content
+    const resumeTime = this.contentVideo.currentTime;
+    this.contentVideo.pause();
+    this.contentVideo.style.display = 'none';
+    this.adContainer.style.display = 'block';
+
+    // Play ad
+    const sdk = new AdgentSDK({
+      container: this.adContainer,
+      vastUrl,
+      targetBitrate: 2500,
+      onComplete: () => this.resumeContent(resumeTime, sdk),
+      onSkip: () => this.resumeContent(resumeTime, sdk),
+      onError: () => this.resumeContent(resumeTime, sdk)
+    });
+
+    try {
+      await sdk.init();
+      await sdk.play();
+    } catch (error) {
+      console.error('Mid-roll failed:', error);
+      this.resumeContent(resumeTime, sdk);
+    }
+  }
+
+  private resumeContent(resumeTime: number, sdk: AdgentSDK) {
+    // Cleanup ad
+    sdk.destroy();
+
+    // Resume content
+    this.adContainer.style.display = 'none';
+    this.contentVideo.style.display = 'block';
+    this.contentVideo.currentTime = resumeTime;
+    this.contentVideo.play();
+  }
+}
+
+// Usage
+const manager = new MidRollManager(
+  document.getElementById('content-video') as HTMLVideoElement,
+  document.getElementById('ad-container') as HTMLElement,
+  [
+    { time: 120, vastUrl: 'https://example.com/midroll1.xml' },
+    { time: 300, vastUrl: 'https://example.com/midroll2.xml' },
+    { time: 480, vastUrl: 'https://example.com/midroll3.xml' }
+  ]
+);
+```
+
+## Event Tracking Integration
+
+Integrate with analytics platforms:
+
+```typescript
+import { AdgentSDK, AdPlayerEvent } from 'adgent-sdk';
+
+class AdAnalytics {
+  private sdk: AdgentSDK;
+  private adId: string;
+  private sessionId: string;
+
+  constructor(sdk: AdgentSDK, adId: string) {
+    this.sdk = sdk;
+    this.adId = adId;
+    this.sessionId = this.generateSessionId();
+
+    // Subscribe to all events
+    this.sdk.on((event) => this.handleEvent(event));
+  }
+
+  private handleEvent(event: AdPlayerEvent) {
+    switch (event.type) {
+      case 'start':
+        this.trackEvent('ad_start', {
+          ad_id: this.adId,
+          session_id: this.sessionId
+        });
+        break;
+
+      case 'quartile':
+        const { quartile } = event.data;
+        this.trackEvent('ad_quartile', {
+          ad_id: this.adId,
+          session_id: this.sessionId,
+          quartile: quartile
+        });
+        break;
+
+      case 'complete':
+        this.trackEvent('ad_complete', {
+          ad_id: this.adId,
+          session_id: this.sessionId,
+          completion_rate: 100
+        });
+        break;
+
+      case 'skip':
+        const state = this.sdk.getState();
+        const skipRate = (state.currentTime / state.duration) * 100;
+        this.trackEvent('ad_skip', {
+          ad_id: this.adId,
+          session_id: this.sessionId,
+          skip_time: state.currentTime,
+          completion_rate: skipRate
+        });
+        break;
+
+      case 'error':
+        this.trackEvent('ad_error', {
+          ad_id: this.adId,
+          session_id: this.sessionId,
+          error_code: event.data.code,
+          error_message: event.data.message
+        });
+        break;
+
+      case 'click':
+        this.trackEvent('ad_click', {
+          ad_id: this.adId,
+          session_id: this.sessionId,
+          click_url: event.data.url
+        });
+        break;
+    }
+  }
+
+  private trackEvent(eventName: string, properties: Record<string, any>) {
+    // Send to your analytics platform
+    if (window.analytics) {
+      window.analytics.track(eventName, properties);
+    }
+
+    // Also log to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Analytics] ${eventName}`, properties);
+    }
+  }
+
+  private generateSessionId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+}
+
+// Usage
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+const analytics = new AdAnalytics(sdk, 'ad-12345');
+
+await sdk.init();
+await sdk.play();
+```
+
+## Platform-Specific Configuration
+
+Adapt configuration based on detected platform:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter } from 'adgent-sdk';
+
+function createPlatformOptimizedSDK(
+  container: HTMLElement,
+  vastUrl: string
+) {
+  const adapter = getPlatformAdapter();
+  const platform = adapter.platform;
+
+  // Base configuration
+  let config = {
+    container,
+    vastUrl,
+    targetBitrate: 2500,
+    timeout: 8000
+  };
+
+  // Platform-specific optimizations
+  switch (platform) {
+    case 'tizen':
+      // Samsung TVs: Good hardware, use higher bitrate
+      config.targetBitrate = 3000;
+      config.timeout = 8000;
+      break;
+
+    case 'webos':
+      // LG TVs: Excellent H.264 decode
+      config.targetBitrate = 2500;
+      config.timeout = 8000;
+      break;
+
+    case 'vidaa':
+      // Hisense: Resource-constrained
+      config.targetBitrate = 1500;
+      config.timeout = 10000; // Slower network
+      break;
+
+    case 'whaleos':
+      // Naver Whale: Modern browser
+      config.targetBitrate = 2500;
+      config.timeout = 6000;
+      break;
+
+    default:
+      // Generic: Conservative settings
+      config.targetBitrate = 2000;
+      config.timeout = 10000;
+  }
+
+  // Adjust for device capabilities
+  if (adapter.capabilities.maxResolution === '720p') {
+    config.targetBitrate = Math.min(config.targetBitrate, 1500);
+  } else if (adapter.capabilities.maxResolution === '4k') {
+    config.targetBitrate = Math.min(config.targetBitrate, 4000);
+  }
+
+  return new AdgentSDK(config);
+}
+
+// Usage
+const sdk = createPlatformOptimizedSDK(
+  document.getElementById('ad-container')!,
+  'https://example.com/vast.xml'
+);
+
+await sdk.init();
+await sdk.play();
+```
+
+## Error Handling with Retry
+
+Implement retry logic for transient failures:
+
+```typescript
+class ResilientAdPlayer {
+  private container: HTMLElement;
+  private vastUrl: string;
+  private maxRetries = 3;
+  private retryDelay = 1000;
+
+  constructor(container: HTMLElement, vastUrl: string) {
+    this.container = container;
+    this.vastUrl = vastUrl;
+  }
+
+  async playWithRetry() {
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        console.log(`Ad attempt ${attempt}/${this.maxRetries}`);
+
+        const sdk = new AdgentSDK({
+          container: this.container,
+          vastUrl: this.vastUrl,
+          targetBitrate: 2500,
+          timeout: 8000
+        });
+
+        await sdk.init();
+        await sdk.play();
+
+        // Success! Wait for completion
+        return new Promise<void>((resolve, reject) => {
+          sdk.on((event) => {
+            if (event.type === 'complete' || event.type === 'skip') {
+              sdk.destroy();
+              resolve();
+            } else if (event.type === 'error') {
+              sdk.destroy();
+              reject(event.data);
+            }
+          });
+        });
+      } catch (error) {
+        console.error(`Ad attempt ${attempt} failed:`, error);
+
+        if (attempt < this.maxRetries) {
+          // Wait before retrying
+          await new Promise(resolve => 
+            setTimeout(resolve, this.retryDelay * attempt)
+          );
+        } else {
+          // All retries exhausted
+          console.error('All ad attempts failed');
+          throw error;
+        }
+      }
+    }
+  }
+}
+
+// Usage
+const player = new ResilientAdPlayer(
+  document.getElementById('ad-container')!,
+  'https://example.com/vast.xml'
+);
+
+try {
+  await player.playWithRetry();
+  console.log('Ad completed successfully');
+} catch (error) {
+  console.error('Ad failed after all retries');
+  // Proceed to content without ad
+}
+```
+
+## Remote Control Handling
+
+Custom handling for TV remote buttons:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+class RemoteControlledAd {
+  private sdk: AdgentSDK;
+  private adapter = getPlatformAdapter();
+  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  constructor(sdk: AdgentSDK) {
+    this.sdk = sdk;
+    this.setupKeyHandling();
+  }
+
+  private setupKeyHandling() {
+    this.keyHandler = (e: KeyboardEvent) => {
+      const action = this.adapter.normalizeKeyCode(e.keyCode);
+
+      switch (action) {
+        case KeyAction.PlayPause:
+          this.handlePlayPause();
+          e.preventDefault();
+          break;
+
+        case KeyAction.Enter:
+          // Unmute on Enter press
+          this.sdk.unmute();
+          e.preventDefault();
+          break;
+
+        case KeyAction.FastForward:
+          this.handleSkip();
+          e.preventDefault();
+          break;
+
+        case KeyAction.Back:
+          // Allow user to exit ad early
+          this.sdk.skip();
+          e.preventDefault();
+          break;
+
+        case KeyAction.Info:
+          this.showAdInfo();
+          e.preventDefault();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', this.keyHandler);
+  }
+
+  private handlePlayPause() {
+    const state = this.sdk.getState();
+    if (state.status === 'playing') {
+      this.sdk.pause();
+    } else if (state.status === 'paused') {
+      this.sdk.resume();
+    }
+  }
+
+  private handleSkip() {
+    const state = this.sdk.getState();
+    if (state.canSkip) {
+      this.sdk.skip();
+    }
+  }
+
+  private showAdInfo() {
+    const state = this.sdk.getState();
+    console.log('Ad Info:', {
+      currentTime: state.currentTime,
+      duration: state.duration,
+      progress: (state.currentTime / state.duration) * 100,
+      canSkip: state.canSkip,
+      skipCountdown: state.skipCountdown
+    });
+  }
+
+  destroy() {
+    if (this.keyHandler) {
+      document.removeEventListener('keydown', this.keyHandler);
+      this.keyHandler = null;
+    }
+  }
+}
+
+// Usage
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+const remoteControl = new RemoteControlledAd(sdk);
+
+await sdk.init();
+await sdk.play();
+
+// Cleanup when done
+sdk.on((event) => {
+  if (event.type === 'complete' || event.type === 'skip') {
+    remoteControl.destroy();
+  }
+});
+```
+
+## Vue.js Component
+
+```vue
+<template>
+  <div class="video-player">
+    <div ref="adContainer" class="ad-container" v-show="showingAd"></div>
+    <video ref="contentVideo" v-show="!showingAd" controls>
+      <source :src="videoUrl" type="video/mp4" />
+    </video>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { AdgentSDK } from 'adgent-sdk';
+
+const props = defineProps<{
+  videoUrl: string;
+  vastUrl: string;
+}>();
+
+const adContainer = ref<HTMLElement | null>(null);
+const contentVideo = ref<HTMLVideoElement | null>(null);
+const showingAd = ref(false);
+let sdk: AdgentSDK | null = null;
+
+onMounted(async () => {
+  await playPreRoll();
+});
+
+onUnmounted(() => {
+  sdk?.destroy();
+});
+
+async function playPreRoll() {
+  if (!adContainer.value) return;
+
+  showingAd.value = true;
+
+  sdk = new AdgentSDK({
+    container: adContainer.value,
+    vastUrl: props.vastUrl,
+    targetBitrate: 2500,
+    onComplete: () => onAdFinished(),
+    onSkip: () => onAdFinished(),
+    onError: (err) => {
+      console.error('Ad error:', err);
+      onAdFinished();
+    }
+  });
+
+  try {
+    await sdk.init();
+    await sdk.play();
+  } catch (error) {
+    console.error('Failed to play ad:', error);
+    onAdFinished();
+  }
+}
+
+function onAdFinished() {
+  sdk?.destroy();
+  sdk = null;
+  showingAd.value = false;
+  contentVideo.value?.play();
+}
+</script>
+
+<style scoped>
+.video-player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.ad-container,
+video {
+  width: 100%;
+  height: 100%;
+}
+</style>
+```
+
+## React Component
+
+```tsx
+import React, { useEffect, useRef, useState } from 'react';
+import { AdgentSDK } from 'adgent-sdk';
+
+interface VideoPlayerProps {
+  videoUrl: string;
+  vastUrl: string;
+}
+
+export function VideoPlayer({ videoUrl, vastUrl }: VideoPlayerProps) {
+  const adContainerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const sdkRef = useRef<AdgentSDK | null>(null);
+  const [showingAd, setShowingAd] = useState(false);
+
+  useEffect(() => {
+    playPreRoll();
+
+    return () => {
+      sdkRef.current?.destroy();
+    };
+  }, [vastUrl]);
+
+  async function playPreRoll() {
+    if (!adContainerRef.current) return;
+
+    setShowingAd(true);
+
+    sdkRef.current = new AdgentSDK({
+      container: adContainerRef.current,
+      vastUrl,
+      targetBitrate: 2500,
+      onComplete: () => onAdFinished(),
+      onSkip: () => onAdFinished(),
+      onError: (err) => {
+        console.error('Ad error:', err);
+        onAdFinished();
+      }
+    });
+
+    try {
+      await sdkRef.current.init();
+      await sdkRef.current.play();
+    } catch (error) {
+      console.error('Failed to play ad:', error);
+      onAdFinished();
+    }
+  }
+
+  function onAdFinished() {
+    sdkRef.current?.destroy();
+    sdkRef.current = null;
+    setShowingAd(false);
+    videoRef.current?.play();
+  }
+
+  return (
+    <div className="video-player">
+      <div 
+        ref={adContainerRef} 
+        className="ad-container"
+        style={{ display: showingAd ? 'block' : 'none' }}
+      />
+      <video
+        ref={videoRef}
+        controls
+        style={{ display: showingAd ? 'none' : 'block' }}
+      >
+        <source src={videoUrl} type="video/mp4" />
+      </video>
+    </div>
+  );
+}
+```
+
+## See Also
+
+- [Quickstart](/quickstart) - Basic getting started guide
+- [Configuration](/guides/configuration) - All configuration options
+- [Event Handling](/guides/event-handling) - Event system details
+- [Platform Detection](/guides/platform-detection) - Platform-specific code

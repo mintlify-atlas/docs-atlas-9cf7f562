@@ -1,0 +1,181 @@
+---
+title: Changelog
+description: Version history and release notes for Adgent SDK
+---
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+No unreleased changes at this time.
+
+## [0.1.0] - 2026-01-13
+
+<Note>
+  Initial release of Adgent SDK with core VAST 4.x playback functionality for Smart TV platforms.
+</Note>
+
+### Added
+
+#### VASTParser
+
+VAST 4.x compliant XML parser with advanced features:
+
+- **Recursive wrapper resolution** with configurable depth limit (default: 5)
+- **Intelligent media file selection** prioritizing 1080p/720p over 4K for Smart TV compatibility
+- **Automatic tracking event aggregation** from entire wrapper chain
+- **Duration parsing** supporting both `HH:MM:SS.mmm` and percentage formats
+- **VPAID filtering** to exclude unsupported interactive ad formats
+
+```typescript
+// Example: Parser configuration
+const parser = new VASTParser({
+  maxWrapperDepth: 5,
+  timeout: 10000,
+  debug: false
+});
+```
+
+#### AdTracker
+
+Fire-and-forget pixel tracking with multiple fallback mechanisms:
+
+- **`navigator.sendBeacon`** as primary tracking method (non-blocking)
+- **`fetch(keepalive)`** fallback for platforms without beacon support
+- **Image pixel** fallback for maximum compatibility
+- **VAST macro replacement**: `[TIMESTAMP]`, `[CACHEBUSTING]`, `[ADPLAYHEAD]`, `[ERRORCODE]`, etc.
+- **Event deduplication** to prevent duplicate tracking fires
+
+```typescript
+// Example: Tracker usage
+const tracker = new AdTracker({
+  impressions: ['https://example.com/imp'],
+  trackingEvents: {
+    start: ['https://example.com/start']
+  }
+});
+
+tracker.track('start', { adPlayhead: 0 });
+```
+
+#### AdPlayer
+
+Core video ad player with Smart TV optimizations:
+
+- **"Nuclear Mute" strategy**: `muted`, `playsinline`, and `autoplay` attributes for maximum autoplay success
+- **Soft-fail autoplay**: Graceful fallback to interactive "Start Ad" overlay when autoplay is blocked
+- **Focus management**: Captures remote control keys during ad playback
+- **Quartile tracking**: Automatic tracking of `start`, `firstQuartile`, `midpoint`, `thirdQuartile`, and `complete` events
+- **Skip functionality** with countdown timer based on VAST `skipOffset`
+- **Comprehensive event system** with both callbacks and listener API
+
+```typescript
+// Example: Player with Nuclear Mute
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  mutedAutoplay: true, // Enabled by default
+  onStart: () => console.log('Ad started'),
+  onComplete: () => console.log('Ad completed')
+});
+
+await player.init();
+await player.play();
+```
+
+#### PlatformAdapter
+
+Smart TV platform detection and normalization:
+
+- **Platform detection** for WebOS, Tizen, Vidaa, WhaleOS, FireTV, Roku, Xbox, PlayStation, AndroidTV, Vizio, and generic web
+- **Remote control key code normalization** across platforms
+- **Capability detection**: `sendBeacon`, `fetch keepalive`, `fullscreen`, HDR, codecs, resolution
+- **Platform-specific utilities**: Key registration (Tizen), video attributes, focus management
+
+```typescript
+// Example: Platform detection
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === 'tizen') {
+  adapter.registerTizenKeys(); // Required for Tizen media keys
+}
+
+const keyAction = adapter.normalizeKeyCode(event.keyCode);
+```
+
+#### TypeScript Types
+
+Full VAST 4.x type definitions:
+
+- **VAST types**: `VASTResponse`, `Ad`, `Creative`, `Linear`, `MediaFile`, `TrackingEvent`
+- **Player types**: `AdPlayerConfig`, `AdPlayerState`, `PlaybackStatus`, `AdProgress`, `AdError`
+- **Platform types**: `Platform`, `KeyAction`, `PlatformCapabilities`, `DeviceInfo`
+- **Event types**: `AdPlayerEvent`, `AdPlayerEventListener`
+
+### Technical Details
+
+<CardGroup cols={2}>
+  <Card title="Bundle Size" icon="file-zipper">
+    - ESM: **9.3 KB gzipped**
+    - UMD: **7.3 KB gzipped**
+  </Card>
+  <Card title="Dependencies" icon="cube">
+    - **1 dependency**: `fast-xml-parser` only
+  </Card>
+  <Card title="Target" icon="microchip">
+    - **ES2020** for Smart TV runtime compatibility
+  </Card>
+  <Card title="Output" icon="package">
+    - ESM + UMD with TypeScript declarations
+  </Card>
+</CardGroup>
+
+### Platform Support
+
+<Tabs>
+  <Tab title="Fully Supported">
+    - WebOS 3.0+ (LG TVs)
+    - Tizen 4.0+ (Samsung TVs)
+    - Vidaa 2.0+ (Hisense TVs)
+    - WhaleOS 1.0+ (Naver Whale)
+    - Generic web browsers
+  </Tab>
+  <Tab title="Additional Support">
+    - Fire TV
+    - Roku
+    - Xbox
+    - PlayStation
+    - Android TV
+    - Vizio SmartCast
+  </Tab>
+</Tabs>
+
+### Known Limitations
+
+<Warning>
+  - **No VPAID support**: Deliberately excluded for performance and security on Smart TVs
+  - **4K ads penalized**: Media selection algorithm favors 1080p for device compatibility
+  - **Legacy codecs**: H.264 recommended over HEVC/VP9 for maximum compatibility
+</Warning>
+
+See [Limitations](/resources/limitations) for detailed explanations.
+
+## Version Links
+
+- [Unreleased](https://github.com/lastninja294/adgent-sdk/compare/v0.1.0...HEAD)
+- [0.1.0](https://github.com/lastninja294/adgent-sdk/releases/tag/v0.1.0)
+
+## Contributing
+
+For questions, issues, or contributions:
+
+- GitHub: [lastninja294/adgent-sdk](https://github.com/lastninja294/adgent-sdk)
+- Issues: [Report a bug](https://github.com/lastninja294/adgent-sdk/issues)
+
+## See Also
+
+- [Installation](/installation) - Getting started
+- [Migration Guide](/resources/migration) - Upgrade instructions
+- [API Reference](/api/adgent-sdk) - Complete API documentation

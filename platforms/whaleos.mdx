@@ -1,0 +1,317 @@
+---
+title: 'Naver WhaleOS'
+description: 'Smart TV platform adapter for Naver Whale browser TVs'
+---
+
+## Overview
+
+WhaleOS is the Smart TV platform powered by Naver's Whale browser. The Adgent SDK provides native support for WhaleOS with optimized detection and key mapping for Whale-based TV devices.
+
+## Supported Versions
+
+- **WhaleOS 1.0+**: Fully supported
+- **Whale Browser**: Compatible with Whale browser on TV devices
+
+## Platform Detection
+
+The SDK automatically detects WhaleOS platforms using user agent patterns:
+
+- User agent matches `/WhaleTV/i`
+- User agent matches `/Whale/i`
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.WhaleOS) {
+  console.log('Running on WhaleOS');
+  console.log('Device info:', adapter.deviceInfo);
+}
+```
+
+## Platform-Specific Features
+
+### Modern Browser Engine
+
+WhaleOS is built on a modern Chromium-based browser engine, providing:
+
+- Modern JavaScript (ES2020+) support
+- Full Web APIs compatibility
+- Better codec support than legacy platforms
+- Standard web video playback
+
+### Video Capabilities
+
+WhaleOS platform capabilities:
+
+- **Resolution**: Up to 4K (varies by hardware)
+- **Codecs**: H.264, HEVC (on compatible hardware), VP9
+- **HDR**: Limited support (depends on TV model)
+- **Autoplay**: Muted autoplay required
+
+```typescript
+const settings = adapter.getRecommendedVideoSettings();
+console.log('Max bitrate:', settings.maxBitrate); // 5000 kbps
+console.log('Preferred codec:', settings.preferredCodec); // 'h264'
+console.log('Max resolution:', settings.maxResolution); // '1080p'
+```
+
+## Remote Control Key Codes
+
+WhaleOS uses standard web key codes with simplified media controls:
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK/Select button |
+| **Back** | **27** | Escape key |
+| Left | 37 | Navigate left |
+| Up | 38 | Navigate up |
+| Right | 39 | Navigate right |
+| Down | 40 | Navigate down |
+| Play | 415 | Play media |
+| Pause | 19 | Pause media |
+| Stop | 413 | Stop playback |
+
+**Note**: WhaleOS provides a limited set of media keys compared to Tizen or WebOS. Color buttons and advanced controls are not exposed to web apps.
+
+### Key Code Normalization
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Normalize platform-specific key code to action
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Back) {
+    console.log('Back button pressed (key code 27)');
+    // Handle back navigation
+  }
+  
+  if (action === KeyAction.Enter) {
+    console.log('Enter button pressed');
+    // Handle selection
+  }
+});
+
+// Get all key codes for back action
+const backKeyCodes = adapter.getKeyCodesForAction(KeyAction.Back);
+console.log('Back key codes:', backKeyCodes); // [27]
+```
+
+## Device Information
+
+Access WhaleOS-specific device information:
+
+```typescript
+const adapter = getPlatformAdapter();
+const info = adapter.deviceInfo;
+
+console.log('Platform:', info.platform); // 'whaleos'
+console.log('Screen:', `${info.screenWidth}x${info.screenHeight}`);
+console.log('Device Pixel Ratio:', info.devicePixelRatio);
+```
+
+**Note**: WhaleOS does not expose manufacturer or model information through standard web APIs.
+
+## Code Example
+
+Complete example for WhaleOS platform:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, Platform, KeyAction } from 'adgent-sdk';
+
+// Initialize platform adapter
+const adapter = getPlatformAdapter();
+
+if (adapter.platform !== Platform.WhaleOS) {
+  console.warn('Not running on WhaleOS platform');
+}
+
+// Configure SDK with WhaleOS-optimized settings
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 3000, // Moderate bitrate for WhaleOS
+  mutedAutoplay: true,
+  onStart: () => {
+    console.log('Ad started on WhaleOS');
+  },
+  onComplete: () => {
+    console.log('Ad completed');
+  },
+  onError: (error) => {
+    console.error('WhaleOS ad error:', error);
+  }
+});
+
+// Handle WhaleOS remote control
+document.addEventListener('keydown', async (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Back:
+      // Escape key (27)
+      await sdk.stop();
+      break;
+      
+    case KeyAction.Play:
+      await sdk.resume();
+      break;
+      
+    case KeyAction.Pause:
+      await sdk.pause();
+      break;
+      
+    case KeyAction.Enter:
+      // Handle ad click
+      await sdk.skip();
+      break;
+  }
+});
+
+// Initialize and play
+await sdk.init();
+await sdk.play();
+```
+
+## Known Limitations
+
+### Media Key Support
+
+- **Limited Keys**: Only basic media keys (Play, Pause, Stop) are exposed
+- **No Color Buttons**: Red, Green, Yellow, Blue buttons not available
+- **No Volume Controls**: Volume/mute not exposed to web apps
+- **No Channel Controls**: Channel up/down not available
+- **No PlayPause Toggle**: Separate Play (415) and Pause (19) keys only
+
+### Platform Maturity
+
+- **Newer Platform**: Less widespread than Tizen or WebOS
+- **Limited Testing**: Fewer devices in the wild for compatibility testing
+- **Documentation**: Less vendor documentation compared to Samsung/LG platforms
+
+### Video Features
+
+- **Variable HDR Support**: HDR availability depends on hardware
+- **Codec Detection Required**: HEVC/VP9 support varies by device
+- **No Hardware Decode Info**: Platform does not expose detailed codec capabilities
+
+### Network & Performance
+
+- **Bitrate Limits**: Conservative bitrate recommended (2500-3000 kbps)
+- **4K Playback**: May be unstable depending on hardware
+- **Memory Constraints**: Similar to other TV platforms, aggressive cleanup required
+
+### External Links
+
+- Opening external links via `openExternalLink()` is **not supported**
+- The method will log a warning and return without action
+
+## Performance Optimization
+
+### Recommended Configuration
+
+```typescript
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // Optimized for WhaleOS
+  targetBitrate: 3000,       // Moderate bitrate
+  timeout: 8000,             // Standard timeout
+  maxWrapperDepth: 5,        // Default wrapper depth
+  mutedAutoplay: true,       // Required for autoplay
+  
+  onError: (error) => {
+    console.error('Ad failed:', error);
+    // Implement graceful fallback
+  }
+});
+```
+
+### Video Encoding Guidelines
+
+For optimal WhaleOS playback:
+
+1. **Codec**: H.264 Main Profile Level 4.1 (primary), HEVC (optional fallback)
+2. **Resolution**: 1920x1080 recommended (4K optional for newer models)
+3. **Bitrate**: 2500-3000 kbps target
+4. **Frame Rate**: 30fps recommended
+5. **Audio**: AAC-LC, 128-192 kbps
+6. **Container**: MP4 (preferred)
+
+### Codec Detection
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Check codec support before playback
+const hevcSupported = adapter.isCodecSupported('video/mp4; codecs="hvc1"');
+const vp9Supported = adapter.isCodecSupported('video/webm; codecs="vp9"');
+
+console.log('HEVC:', hevcSupported);
+console.log('VP9:', vp9Supported);
+
+// Always have H.264 fallback
+const h264Supported = adapter.isCodecSupported('video/mp4; codecs="avc1"');
+console.log('H.264:', h264Supported); // Should always be true
+```
+
+## Debugging
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Enable debug logging
+adapter.debug('Ad playback started on WhaleOS');
+
+// Check capabilities
+console.log('Platform:', adapter.platform);
+console.log('Capabilities:', adapter.capabilities);
+```
+
+## Best Practices
+
+1. **Moderate Bitrates**: Use 2500-3000 kbps for stability
+2. **H.264 Fallback**: Always provide H.264 option for maximum compatibility
+3. **Test Codec Support**: Use `isCodecSupported()` to detect HEVC/VP9 availability
+4. **Handle Escape Key**: Use keyCode 27 for back button
+5. **Muted Autoplay**: Always enable muted autoplay for compliance
+6. **Clean Up Resources**: Call `sdk.destroy()` when done
+7. **Modern Web APIs**: Take advantage of Chromium-based features
+8. **Graceful Degradation**: Implement error handling and fallbacks
+
+## Whale Browser Specifics
+
+WhaleOS is built on Naver Whale browser, which provides:
+
+- **Chromium Base**: Modern web standards support
+- **ES2020+ Support**: Use modern JavaScript features
+- **Web Components**: Full custom element support
+- **Fetch API**: Native fetch with keepalive support
+- **Promises**: Full async/await support
+
+```typescript
+// Modern JavaScript features work well on WhaleOS
+const adapter = getPlatformAdapter();
+
+if (adapter.capabilities.fetchKeepalive) {
+  // Use keepalive for tracking beacons
+  fetch('https://analytics.example.com/event', {
+    method: 'POST',
+    keepalive: true,
+    body: JSON.stringify({ event: 'ad_complete' })
+  });
+}
+```
+
+## See Also
+
+- [Platform Detection](/core/platform-adapter)
+- [Key Code Normalization](/guides/remote-control)
+- [Video Capabilities](/guides/video-optimization)
+- [Codec Detection](/guides/codec-support)

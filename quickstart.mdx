@@ -1,80 +1,326 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get your first video ad playing with Adgent SDK in under 5 minutes
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will walk you through creating a basic ad player that fetches a VAST tag and plays a video advertisement on Smart TV platforms.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+**Time to complete**: ~5 minutes
+
+**What you'll build**: A fully functional video ad player with autoplay, skip button, progress tracking, and event handling
 </Note>
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- Node.js 14+ installed
+- A Smart TV project (or any JavaScript/TypeScript project)
+- A VAST tag URL for testing (you can use a test VAST from your ad server)
+
+## Step-by-Step Guide
+
+<Steps>
+  <Step title="Install the SDK">
+    Install Adgent SDK using your preferred package manager:
+    
+    ```bash
+    npm install adgent-sdk
+    ```
+  </Step>
+  
+  <Step title="Create an HTML container">
+    Add a container element where the ad player will render:
+    
+    ```html
+    <div id="ad-container" style="width: 1920px; height: 1080px; position: relative;"></div>
+    ```
+    
+    <Warning>
+    The container must have a defined width and height. For Smart TVs, use 1920x1080 (Full HD) or 3840x2160 (4K) dimensions.
+    </Warning>
+  </Step>
+  
+  <Step title="Initialize the SDK">
+    Import and initialize the AdgentSDK with your VAST URL:
+    
+    ```typescript
+    import { AdgentSDK } from 'adgent-sdk';
+    
+    const sdk = new AdgentSDK({
+      container: document.getElementById('ad-container')!,
+      vastUrl: 'https://example.com/vast.xml',
+      targetBitrate: 2500, // Prefer 1080p (2500 kbps)
+      skipOffset: 5, // Allow skip after 5 seconds
+      debug: true, // Enable console logging
+      
+      // Event callbacks
+      onStart: () => {
+        console.log('Ad started playing');
+      },
+      onComplete: () => {
+        console.log('Ad completed - resume main content');
+        // Resume your main video content here
+      },
+      onError: (error) => {
+        console.error('Ad error:', error.message);
+        // Gracefully handle error - resume main content
+      },
+      onSkip: () => {
+        console.log('User skipped the ad');
+      }
+    });
+    ```
+  </Step>
+  
+  <Step title="Initialize and play the ad">
+    Call `init()` to fetch the VAST and prepare the player, then call `play()` to start playback:
+    
+    ```typescript
+    async function playAd() {
+      try {
+        // Fetch VAST, select media file, create video element
+        await sdk.init();
+        
+        // Ad will autoplay with muted audio (Nuclear Mute strategy)
+        // No need to call play() - it's handled automatically
+        
+        console.log('Ad initialized and playing');
+      } catch (error) {
+        console.error('Failed to initialize ad:', error);
+        // Handle error gracefully
+      }
+    }
+    
+    playAd();
+    ```
+    
+    <Note>
+    The `init()` method automatically attempts autoplay using the "Nuclear Mute" strategy (muted + playsinline + autoplay). If autoplay fails (rare on TVs), an interactive overlay will appear.
+    </Note>
+  </Step>
+</Steps>
+
+## Complete Example
+
+Here's a complete working example:
+
+<CodeGroup>
+
+```typescript TypeScript
+import { AdgentSDK, AdProgress, AdError } from 'adgent-sdk';
+
+// Initialize the SDK
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=',
+  
+  // Configuration
+  targetBitrate: 2500,
+  skipOffset: 5,
+  skipButtonText: 'Skip Ad',
+  debug: true,
+  
+  // Event handlers
+  onStart: () => {
+    console.log('✅ Ad playback started');
+    // Pause main content, hide controls, etc.
+  },
+  
+  onProgress: (progress: AdProgress) => {
+    const { currentTime, duration, percentage, quartile } = progress;
+    console.log(`⏱️ Progress: ${currentTime.toFixed(1)}s / ${duration.toFixed(1)}s (${percentage.toFixed(1)}%)`);
+  },
+  
+  onComplete: () => {
+    console.log('✅ Ad completed successfully');
+    sdk.destroy(); // Clean up resources
+    // Resume main content playback
+  },
+  
+  onSkip: () => {
+    console.log('⏭️ User skipped the ad');
+    sdk.destroy();
+    // Resume main content playback
+  },
+  
+  onError: (error: AdError) => {
+    console.error('❌ Ad error:', error.message, `(code: ${error.code})`);
+    sdk.destroy();
+    // Resume main content playback as fallback
+  },
+  
+  onClick: (url: string) => {
+    console.log('🖱️ Ad clicked:', url);
+    // Opens URL in external browser on Smart TV
+  },
+  
+  onClose: () => {
+    console.log('🔙 User pressed Back button');
+    sdk.destroy();
+    // Resume main content
+  }
+});
+
+// Initialize and play
+async function playAd() {
+  try {
+    await sdk.init();
+    console.log('🎬 Ad initialized and playing');
+  } catch (error) {
+    console.error('Failed to initialize ad:', error);
+  }
+}
+
+playAd();
+```
+
+```javascript JavaScript
+import { AdgentSDK } from 'adgent-sdk';
+
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=',
+  
+  targetBitrate: 2500,
+  skipOffset: 5,
+  debug: true,
+  
+  onStart: () => console.log('Ad started'),
+  onComplete: () => {
+    console.log('Ad completed');
+    sdk.destroy();
+  },
+  onError: (error) => {
+    console.error('Ad error:', error.message);
+    sdk.destroy();
+  }
+});
+
+sdk.init().then(() => {
+  console.log('Ad initialized');
+}).catch((error) => {
+  console.error('Init failed:', error);
+});
+```
+
+</CodeGroup>
+
+## What Happens Under the Hood
+
+When you call `sdk.init()`, Adgent SDK performs the following steps:
+
+<Steps>
+  <Step title="Fetch VAST XML">
+    Downloads the VAST document from the provided URL with a 10-second timeout
+  </Step>
+  
+  <Step title="Parse and resolve wrappers">
+    Parses the XML and follows wrapper chains up to 5 levels deep, aggregating tracking pixels
+  </Step>
+  
+  <Step title="Select best media file">
+    Analyzes available media files and selects the optimal one based on:
+    - Codec compatibility (H.264 > H.265 > VP9)
+    - Bitrate matching (closest to `targetBitrate: 2500` kbps)
+    - Resolution preference (1080p preferred, 4K penalized)
+    - Container format (MP4 preferred)
+  </Step>
+  
+  <Step title="Create video element">
+    Generates an HTML5 `<video>` element with platform-specific attributes:
+    - `muted` (for autoplay compliance)
+    - `playsinline` (for iOS/mobile platforms)
+    - `autoplay` (attempts immediate playback)
+    - `crossorigin="anonymous"` (for CDN content)
+  </Step>
+  
+  <Step title="Setup UI components">
+    Creates:
+    - Skip button (appears after `skipOffset` seconds)
+    - Progress indicator (top-left "Ad • 1 of 1 • 0:30" counter)
+    - Focus trap (captures remote control keys)
+  </Step>
+  
+  <Step title="Attempt autoplay">
+    Tries to play the video automatically. If autoplay fails:
+    - Shows an interactive overlay with a play button
+    - Waits for user interaction (Enter key or click)
+    - Fires impression pixels only after playback actually starts
+  </Step>
+</Steps>
+
+<Note>
+The "Nuclear Mute" strategy (muted + playsinline + autoplay) achieves near-100% autoplay success on Smart TV platforms, with the interactive overlay as a graceful fallback.
+</Note>
+
+## Testing Your Integration
+
+Use this test VAST URL for development:
+
+```
+https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=
+```
+
+This is Google's test VAST tag that returns a 30-second linear video ad.
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Ad doesn't autoplay">
+    **Solution**: This is expected behavior on some platforms. The SDK automatically shows an interactive overlay when autoplay fails. Ensure your container is visible and the user can interact with it.
+    
+    ```typescript
+    // The SDK handles this automatically
+    // If autoplay fails, an overlay with a play button appears
+    ```
+  </Accordion>
+  
+  <Accordion title="Video doesn't fit the container">
+    **Solution**: Ensure your container has explicit `width` and `height` styles and `position: relative`:
+    
+    ```html
+    <div id="ad-container" style="width: 1920px; height: 1080px; position: relative;"></div>
+    ```
+  </Accordion>
+  
+  <Accordion title="Error: No suitable media file found">
+    **Solution**: The VAST tag may contain only VPAID or unsupported formats. Adgent SDK filters out VPAID and selects H.264/VP9 video files. Verify your VAST contains standard MP4 media files.
+  </Accordion>
+  
+  <Accordion title="Skip button doesn't appear">
+    **Solution**: Check if the VAST includes a `skipoffset` attribute, or set one manually:
+    
+    ```typescript
+    const sdk = new AdgentSDK({
+      skipOffset: 5, // Force skip after 5 seconds
+      // ...
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have a working ad player, explore these advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Event Handling" icon="bolt" href="/events">
+    Learn about all available events and callbacks
+  </Card>
+  
+  <Card title="Configuration Options" icon="sliders" href="/configuration">
+    Customize bitrate, timeouts, skip behavior, and more
+  </Card>
+  
+  <Card title="Platform Adapters" icon="tv" href="/platforms">
+    Platform-specific features for WebOS, Tizen, and Vidaa
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Complete API documentation
+  </Card>
+</CardGroup>

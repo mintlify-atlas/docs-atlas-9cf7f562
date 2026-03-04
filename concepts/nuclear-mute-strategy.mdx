@@ -1,0 +1,610 @@
+---
+title: 'Nuclear Mute Strategy'
+description: 'Fault-tolerant autoplay approach for Smart TV platforms with soft-fail recovery'
+icon: 'volume-xmark'
+---
+
+The "Nuclear Mute" strategy is Adgent SDK's approach to achieving reliable autoplay on Smart TV platforms. It combines aggressive muting, playsinline enforcement, and soft-fail recovery to maximize the chances of successful ad playback.
+
+## What is Nuclear Mute?
+
+Nuclear Mute is a **defense-in-depth autoplay strategy** that applies multiple HTML5 video attributes simultaneously to ensure the video element can autoplay without user interaction:
+
+1. **`muted`**: Forces audio to be muted
+2. **`playsinline`**: Prevents fullscreen on iOS/mobile
+3. **`autoplay`**: Enables automatic playback
+4. **`webkit-playsinline`**: Legacy WebKit compatibility
+
+These attributes are applied together to create the highest probability of successful autoplay across all Smart TV platforms.
+
+```typescript
+const attrs = {
+  muted: true,
+  playsinline: true,
+  autoplay: true,
+  'webkit-playsinline': true
+};
+```
+
+Implementation: `src/core/PlatformAdapter.ts:327-332`
+
+<Info>
+The name "Nuclear" reflects the aggressive, no-compromises approach: **always muted, always playsinline, always autoplay**.
+</Info>
+
+## Why is Nuclear Mute Needed?
+
+### Smart TV Autoplay Constraints
+
+Modern browsers (including TV web runtimes) have strict autoplay policies to prevent annoying users with unexpected audio. These policies block autoplay unless:
+
+1. User has interacted with the page (click, tap, key press)
+2. Media Element Activation (MEI) score is high enough
+3. Video is **muted**
+
+Smart TVs inherit these restrictions from their underlying web engines (Chromium for webOS/Tizen, WebKit for older platforms).
+
+### The TV Dilemma
+
+TV apps need ads to start automatically when the content pauses, but:
+
+- **No touch events**: TVs don't have touchscreens
+- **Limited interaction**: Users may not press any remote buttons
+- **MEI score zero**: App might just have launched
+- **Audio required**: Advertisers want sound!
+
+Nuclear Mute solves this by **starting muted** (to satisfy autoplay policies), then providing a recovery path if playback fails.
+
+## How Nuclear Mute Works
+
+The strategy has two phases: **Autoplay Attempt** and **Soft-Fail Recovery**.
+
+### Phase 1: Autoplay Attempt
+
+```typescript
+private async attemptAutoplay(): Promise<void> {
+  if (!this.videoElement) return;
+
+  try {
+    await this.videoElement.play();
+    this.handlePlaybackStart();
+  } catch (error) {
+    // Soft-fail: show "Start Ad" overlay instead of crashing
+    this.log(`Autoplay failed: ${error}`);
+    this.showStartOverlay();
+  }
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:270-282`
+
+**Flow:**
+
+1. Video element is created with Nuclear Mute attributes
+2. SDK calls `video.play()` immediately after video loads
+3. If successful → playback starts, impressions fire, ad plays
+4. If rejected → catch error, proceed to Phase 2
+
+<Note>
+`video.play()` returns a Promise that rejects if autoplay is blocked. This allows graceful error handling.
+</Note>
+
+### Phase 2: Soft-Fail Recovery
+
+If autoplay fails, the SDK doesn't crash or show an error. Instead, it displays an **interactive play button overlay**:
+
+```typescript
+private showStartOverlay(): void {
+  this.updateState({ status: PlaybackStatus.WaitingForInteraction });
+
+  // Create overlay with play button
+  const overlay = document.createElement('div');
+  overlay.innerHTML = `
+    <div style="
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: table;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+    ">
+      <div style="display: table-cell; vertical-align: middle; text-align: center;">
+        <button id="adgent-start-btn" style="
+          width: 80px;
+          height: 80px;
+          background: rgba(0, 0, 0, 0.7);
+          border: 3px solid #fff;
+          border-radius: 50%;
+          cursor: pointer;
+          color: #fff;
+          font-size: 40px;
+          padding: 0 0 0 8px;
+        ">
+          ▶
+        </button>
+      </div>
+    </div>
+  `;
+
+  const button = overlay.querySelector('#adgent-start-btn');
+  button?.addEventListener('click', () => this.onStartClick());
+
+  this.config.container.appendChild(overlay);
+  this.overlayElement = overlay;
+
+  (button as HTMLElement)?.focus();
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:287-338`
+
+**Flow:**
+
+1. Overlay appears with large play button (▶)
+2. User clicks button or presses Enter on remote
+3. `onStartClick()` is called
+4. Playback starts (user interaction satisfies autoplay policy)
+
+### Start Button Click Handler
+
+```typescript
+private async onStartClick(): Promise<void> {
+  this.removeOverlay();
+  
+  if (this.videoElement) {
+    try {
+      await this.videoElement.play();
+      
+      // If already started once, this is a Resume action
+      if (this.hasStarted) {
+        this.updateState({ status: PlaybackStatus.Playing });
+        this.emit({ type: 'resume' });
+        this.tracker?.track('resume');
+      } else {
+        this.handlePlaybackStart();
+      }
+    } catch (error) {
+      this.handleError(
+        this.createError(
+          VASTErrorCode.GENERAL_LINEAR_ERROR,
+          `Playback failed: ${error}`
+        )
+      );
+    }
+  }
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:381-405`
+
+This method handles both:
+
+- **Initial start**: First playback attempt (fires `start` event)
+- **Resume**: If user paused and is resuming (fires `resume` event)
+
+## Video Element Creation
+
+The video element is created with platform-specific attributes from the PlatformAdapter:
+
+```typescript
+private createVideoElement(mediaFile: MediaFile): void {
+  const video = document.createElement('video');
+  
+  // Apply platform-specific attributes (includes Nuclear Mute)
+  const attrs = this.platform.getVideoAttributes();
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (typeof value === 'boolean') {
+      if (value) video.setAttribute(key, '');
+    } else {
+      video.setAttribute(key, value);
+    }
+  });
+
+  // Create source element (avoid src attribute for better compatibility)
+  video.removeAttribute('src'); 
+  video.innerHTML = '';
+  
+  const source = document.createElement('source');
+  source.src = mediaFile.url;
+  source.type = mediaFile.type || 'video/mp4'; 
+  video.appendChild(source);
+
+  // WebOS often requires CORS for CDN content
+  video.setAttribute('crossorigin', 'anonymous');
+  video.style.cssText = `
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  `;
+
+  // ... event listeners ...
+
+  this.config.container.appendChild(video);
+  this.videoElement = video;
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:173-264`
+
+<Tip>
+**Why use `<source>` instead of `src` attribute?**
+
+Some Smart TV platforms (especially older webOS versions) have better codec detection when media is loaded via `<source>` elements rather than the `src` attribute.
+</Tip>
+
+## Platform-Specific Attributes
+
+Each platform may require additional attributes for optimal playback:
+
+### Tizen
+
+```typescript
+attrs['data-samsung-immersive'] = 'true';
+```
+
+Enables immersive mode on Samsung TVs (hides system UI during playback).
+
+### webOS
+
+```typescript
+attrs['data-lg-immersive'] = 'true';
+```
+
+Enables immersive mode on LG TVs.
+
+### Android-based (Fire TV, Android TV)
+
+```typescript
+attrs['x-webkit-airplay'] = 'allow';
+```
+
+Enables AirPlay compatibility for casting.
+
+Platform attributes implementation: `src/core/PlatformAdapter.ts:335-350`
+
+## CORS Configuration
+
+The video element includes `crossorigin="anonymous"` to enable CORS:
+
+```typescript
+video.setAttribute('crossorigin', 'anonymous');
+```
+
+Implementation: `src/core/AdPlayer.ts:194`
+
+**Why CORS?**
+
+- **webOS**: LG's web runtime strictly enforces CORS for CDN-hosted content
+- **Tracking**: Some VAST tracking pixels require CORS
+- **Canvas operations**: If you need to capture video frames (e.g., for thumbnails)
+
+<Warning>
+Your CDN must send `Access-Control-Allow-Origin: *` header for video files, otherwise webOS will block playback.
+</Warning>
+
+## Soft-Fail Recovery Scenarios
+
+The overlay appears in multiple scenarios:
+
+### 1. Autoplay Policy Rejection
+
+Most common scenario:
+
+```javascript
+// Browser rejects play() due to autoplay policy
+DOMException: play() failed because user didn't interact with document
+```
+
+### 2. User Clicks Ad
+
+When user clicks the video during playback:
+
+```typescript
+video.addEventListener('click', () => {
+  this.onAdClick();
+});
+
+private onAdClick(): void {
+  if (this.state.status !== PlaybackStatus.Playing) return;
+
+  const clickThrough = linear.videoClicks?.clickThrough;
+  const url = clickThrough?.url;
+
+  if (url) {
+    // Pause playback
+    this.videoElement?.pause();
+    
+    // Show play button so user can resume
+    this.showStartOverlay();
+    
+    // Open URL
+    this.platform.openExternalLink(url);
+  }
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:343-376`
+
+This allows users to resume the ad after clicking through to the advertiser's site.
+
+### 3. Remote Control Resume
+
+If user presses Play/Pause on remote:
+
+```typescript
+private handleKeyAction(action: KeyAction): void {
+  switch (action) {
+    case KeyAction.Enter:
+      if (this.state.status === PlaybackStatus.WaitingForInteraction) {
+        this.onStartClick();
+      }
+      break;
+
+    case KeyAction.Play:
+      this.videoElement?.play();
+      break;
+
+    case KeyAction.Pause:
+      this.videoElement?.pause();
+      break;
+  }
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:687-718`
+
+## Unmuting After Autoplay
+
+Since the video starts **muted** to satisfy autoplay policies, you may want to unmute after successful playback start:
+
+```typescript
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  onStart: () => {
+    // Ad successfully started, unmute to play with audio
+    sdk.unmute();
+  }
+});
+```
+
+### Unmute Method
+
+```typescript
+unmute(): void {
+  if (this.videoElement) {
+    this.videoElement.muted = false;
+    this.updateState({ muted: false });
+    this.tracker?.track('unmute');
+    this.emit({ type: 'unmute' });
+  }
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:731-738`
+
+<Note>
+Unmuting after autoplay starts is safe because the video has already satisfied the autoplay policy (user interaction is no longer required).
+</Note>
+
+## Code Implementation Details
+
+### Focus Management
+
+The SDK sets up a focus trap to capture remote control keys:
+
+```typescript
+private setupFocusManagement(): void {
+  this.focusTrap = document.createElement('div');
+  this.focusTrap.tabIndex = 0;
+  this.focusTrap.style.cssText = 'position: absolute; opacity: 0; width: 0; height: 0;';
+  this.config.container.appendChild(this.focusTrap);
+  this.focusTrap.focus();
+
+  this.boundKeyHandler = (e: KeyboardEvent) => {
+    const action = this.platform.normalizeKeyCode(e.keyCode);
+    
+    if (action) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleKeyAction(action);
+    }
+  };
+
+  document.addEventListener('keydown', this.boundKeyHandler, true);
+}
+```
+
+Implementation: `src/core/AdPlayer.ts:615-633`
+
+This ensures the SDK receives all remote control events, even when the video element doesn't have focus.
+
+### Playback State Tracking
+
+```typescript
+interface AdPlayerState {
+  status: PlaybackStatus;
+  currentTime: number;
+  duration: number;
+  muted: boolean;
+  volume: number;
+  canSkip: boolean;
+  skipCountdown: number;
+  mediaFile: MediaFile | null;
+  error: AdError | null;
+}
+
+enum PlaybackStatus {
+  Idle = 'idle',
+  Loading = 'loading',
+  Ready = 'ready',
+  WaitingForInteraction = 'waiting_for_interaction',  // Overlay shown
+  Playing = 'playing',
+  Paused = 'paused',
+  Completed = 'completed',
+  Error = 'error'
+}
+```
+
+The `WaitingForInteraction` status indicates the soft-fail overlay is displayed.
+
+State interface: `src/types/player.ts` (referenced in `src/core/AdPlayer.ts:70-80`)
+
+### Event Listeners
+
+The video element has comprehensive event listeners:
+
+```typescript
+video.addEventListener('loadedmetadata', () => {
+  this.updateState({ 
+    duration: video.duration,
+    status: PlaybackStatus.Ready 
+  });
+  this.emit({ type: 'loaded' });
+});
+
+video.addEventListener('play', () => {
+  this.updateState({ status: PlaybackStatus.Playing });
+});
+
+video.addEventListener('pause', () => {
+  if (this.state.status !== PlaybackStatus.Completed) {
+    this.updateState({ status: PlaybackStatus.Paused });
+    this.emit({ type: 'pause' });
+    this.tracker?.track('pause');
+  }
+});
+
+video.addEventListener('ended', () => {
+  this.handleComplete();
+});
+
+video.addEventListener('error', () => {
+  const error = video.error;
+  this.handleError(
+    this.createError(
+      VASTErrorCode.MEDIA_NOT_SUPPORTED,
+      error?.message || 'Video playback error'
+    )
+  );
+});
+```
+
+Implementation: `src/core/AdPlayer.ts:202-239`
+
+## Best Practices
+
+### 1. Always Start Muted
+
+Don't disable the Nuclear Mute strategy. It's the only reliable way to achieve autoplay across all platforms.
+
+```typescript
+// ✅ Good: Default behavior (muted autoplay)
+const sdk = new AdgentSDK({ /* ... */ });
+
+// ❌ Bad: Trying to force unmuted autoplay will fail
+const sdk = new AdgentSDK({
+  mutedAutoplay: false  // This will fail on most platforms
+});
+```
+
+### 2. Unmute After Start
+
+Use the `onStart` callback to unmute after successful autoplay:
+
+```typescript
+const sdk = new AdgentSDK({
+  container: element,
+  vastUrl: url,
+  onStart: () => {
+    sdk.unmute();
+  }
+});
+```
+
+### 3. Handle Waiting State
+
+Inform users if they see the overlay:
+
+```typescript
+const sdk = new AdgentSDK({
+  container: element,
+  vastUrl: url,
+  onStart: () => {
+    hideLoadingSpinner();
+  }
+});
+
+// Monitor state
+sdk.on((event) => {
+  if (sdk.getState().status === 'waiting_for_interaction') {
+    showMessage('Press OK to start ad');
+  }
+});
+```
+
+### 4. Custom Overlay
+
+Provide a custom overlay that matches your app's design:
+
+```typescript
+const customOverlay = document.createElement('div');
+customOverlay.innerHTML = `
+  <div class="my-custom-overlay">
+    <button class="my-play-button">Start Ad</button>
+  </div>
+`;
+
+const sdk = new AdgentSDK({
+  container: element,
+  vastUrl: url,
+  customStartOverlay: customOverlay
+});
+```
+
+Custom overlay support: `src/core/AdPlayer.ts:290-294`
+
+## Debugging
+
+Enable debug logging to see Nuclear Mute strategy in action:
+
+```typescript
+const sdk = new AdgentSDK({
+  container: element,
+  vastUrl: url,
+  debug: true
+});
+```
+
+Debug output includes:
+
+```
+[Adgent] Video element created with src: https://example.com/ad.mp4
+[Adgent] Video loadedmetadata
+[Adgent] Video canplay
+[Adgent] Video play event
+[Adgent] Playback started
+```
+
+Or if autoplay fails:
+
+```
+[Adgent] Autoplay failed: NotAllowedError: play() failed because user didn't interact
+[Adgent] Showing start overlay
+```
+
+Debug logging: `src/core/AdPlayer.ts:244-255` and `src/core/AdPlayer.ts:836-841`
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="VAST Compliance" icon="video" href="/concepts/vast-compliance">
+    Learn about VAST parsing and media selection
+  </Card>
+  <Card title="Platform Support" icon="tv" href="/concepts/platform-support">
+    Understand platform detection and capabilities
+  </Card>
+</CardGroup>

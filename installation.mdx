@@ -1,0 +1,194 @@
+---
+title: Installation
+description: Install the Adgent SDK in your Smart TV project using npm, yarn, or pnpm
+---
+
+## Package Manager Installation
+
+Adgent SDK is available on npm and can be installed using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install adgent-sdk
+```
+
+```bash yarn
+yarn add adgent-sdk
+```
+
+```bash pnpm
+pnpm add adgent-sdk
+```
+
+</CodeGroup>
+
+## Package Details
+
+Once installed, you'll have access to the following:
+
+- **Package Name**: `adgent-sdk`
+- **Version**: 0.1.10
+- **Bundle Size**: < 20KB gzipped (~50KB minified)
+- **Dependencies**: Only `fast-xml-parser` for VAST XML parsing
+- **Module Formats**: ES modules (`.es.js`) and UMD (`.umd.js`)
+
+<Note>
+Adgent SDK is distributed as both ES modules and UMD, ensuring compatibility with modern bundlers (Webpack, Vite, Rollup) and legacy build systems.
+</Note>
+
+## TypeScript Setup
+
+Adgent SDK includes full TypeScript definitions out of the box. No additional `@types` packages are required.
+
+### Import the SDK
+
+```typescript
+import { AdgentSDK } from 'adgent-sdk';
+
+// Or import specific types
+import { 
+  AdgentSDK, 
+  AdPlayerConfig, 
+  AdPlayerState,
+  AdProgress,
+  AdError,
+  PlaybackStatus 
+} from 'adgent-sdk';
+```
+
+### Type Definitions
+
+The SDK exports comprehensive TypeScript types for all configuration options, state, events, and platform adapters:
+
+```typescript
+interface AdPlayerConfig {
+  container: HTMLElement;
+  vastUrl: string;
+  targetBitrate?: number;      // Default: 2500 kbps
+  maxWrapperDepth?: number;    // Default: 5
+  timeout?: number;            // Default: 10000ms
+  debug?: boolean;             // Default: false
+  skipButtonText?: string;     // Default: 'Skip Ad'
+  skipOffset?: number;         // Override VAST skipOffset
+  onComplete?: () => void;
+  onError?: (error: AdError) => void;
+  onStart?: () => void;
+  onProgress?: (progress: AdProgress) => void;
+  onSkip?: () => void;
+  onClick?: (url: string) => void;
+  onPause?: () => void;
+  onResume?: () => void;
+  onClose?: () => void;
+}
+```
+
+<Note>
+All callback functions are optional. You can use either callbacks or the event listener API (`sdk.on()`) to handle ad events.
+</Note>
+
+## JavaScript Setup
+
+For vanilla JavaScript projects, import the SDK using CommonJS or ES modules:
+
+<CodeGroup>
+
+```javascript ES Modules
+import { AdgentSDK } from 'adgent-sdk';
+
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+```
+
+```javascript CommonJS
+const { AdgentSDK } = require('adgent-sdk');
+
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+```
+
+</CodeGroup>
+
+## Verification
+
+Verify your installation by checking the SDK version:
+
+```javascript
+import { AdgentSDK } from 'adgent-sdk';
+
+console.log('Adgent SDK loaded successfully');
+
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  debug: true // Enable debug logging
+});
+```
+
+With `debug: true`, you'll see detailed console logs including:
+
+- Platform detection (WebOS, Tizen, Vidaa, WhaleOS, or generic)
+- VAST parsing progress
+- Media file selection
+- Tracking pixel fires
+- Playback events
+
+## Bundle Size Optimization
+
+For optimal bundle size in production:
+
+<Steps>
+  <Step title="Enable tree-shaking">
+    Use ES modules imports to allow your bundler to tree-shake unused code:
+    
+    ```javascript
+    import { AdgentSDK } from 'adgent-sdk'; // Good ✅
+    const AdgentSDK = require('adgent-sdk').AdgentSDK; // Less optimal ⚠️
+    ```
+  </Step>
+  
+  <Step title="Lazy load the SDK">
+    Load Adgent SDK only when ad playback is needed:
+    
+    ```javascript
+    async function playAd() {
+      const { AdgentSDK } = await import('adgent-sdk');
+      // Initialize and play ad
+    }
+    ```
+  </Step>
+  
+  <Step title="Configure bundler">
+    Ensure your bundler is configured for optimal minification:
+    
+    ```javascript Vite Example
+    // vite.config.js
+    export default {
+      build: {
+        minify: 'terser',
+        terserOptions: {
+          compress: {
+            drop_console: true // Remove debug logs in production
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Build your first ad player in 5 minutes
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore all configuration options and methods
+  </Card>
+</CardGroup>

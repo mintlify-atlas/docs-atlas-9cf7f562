@@ -1,0 +1,305 @@
+---
+title: 'Hisense Vidaa'
+description: 'Smart TV platform adapter for Hisense Vidaa TVs'
+---
+
+## Overview
+
+Hisense Vidaa is the Smart TV platform used in Hisense televisions. The Adgent SDK provides native support for Vidaa with a lightweight implementation optimized for the platform's resource constraints.
+
+## Supported Versions
+
+- **Vidaa 2.0+**: Fully supported
+- **Vidaa U3+**: Recommended for best performance
+- **Vidaa U4+**: Latest version with enhanced features
+
+## Platform Detection
+
+The SDK automatically detects Vidaa platforms using user agent patterns:
+
+- User agent matches `/Vidaa/i`
+- User agent matches `/VIDAA/i`
+- User agent matches `/Hisense/i`
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.Vidaa) {
+  console.log('Running on Hisense Vidaa');
+  console.log('Device info:', adapter.deviceInfo);
+}
+```
+
+## Platform-Specific Features
+
+### Lightweight Implementation
+
+Vidaa TVs typically have more constrained hardware compared to WebOS or Tizen. The SDK provides a lightweight implementation:
+
+- Minimal memory footprint
+- Optimized video playback
+- Reduced codec requirements
+- Simplified key mapping
+
+### Video Capabilities
+
+Vidaa platform capabilities (varies by model):
+
+- **Resolution**: Up to 4K on newer models (1080p recommended)
+- **HEVC Support**: Available on Vidaa U3+
+- **HDR**: Limited HDR10 support on select models
+- **Preferred Codec**: H.264 for maximum compatibility
+
+```typescript
+const settings = adapter.getRecommendedVideoSettings();
+console.log('Max bitrate:', settings.maxBitrate); // 5000 kbps (conservative)
+console.log('Preferred codec:', settings.preferredCodec); // 'h264'
+console.log('Max resolution:', settings.maxResolution); // '1080p'
+```
+
+## Remote Control Key Codes
+
+Vidaa uses standard web key codes with dual back button support:
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK/Select button |
+| **Back** | **8** | Backspace (primary) |
+| **Back** | **27** | Escape (secondary) |
+| Left | 37 | Navigate left |
+| Up | 38 | Navigate up |
+| Right | 39 | Navigate right |
+| Down | 40 | Navigate down |
+| Play | 415 | Play media |
+| Pause | 19 | Pause media |
+| Stop | 413 | Stop playback |
+| Fast Forward | 417 | Skip forward |
+| Rewind | 412 | Skip backward |
+
+**Note**: Vidaa does not provide extended key codes for color buttons, volume, or channel controls in web apps.
+
+### Key Code Normalization
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Normalize platform-specific key code to action
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Back) {
+    // Handles both key codes 8 and 27
+    console.log('Back button pressed');
+    // Handle back navigation
+  }
+  
+  if (action === KeyAction.Enter) {
+    console.log('Enter button pressed');
+    // Handle selection
+  }
+});
+
+// Get all key codes for back action
+const backKeyCodes = adapter.getKeyCodesForAction(KeyAction.Back);
+console.log('Back key codes:', backKeyCodes); // [8, 27]
+```
+
+## Device Information
+
+Access Vidaa-specific device information:
+
+```typescript
+const adapter = getPlatformAdapter();
+const info = adapter.deviceInfo;
+
+console.log('Platform:', info.platform); // 'vidaa'
+console.log('Screen:', `${info.screenWidth}x${info.screenHeight}`);
+console.log('Device Pixel Ratio:', info.devicePixelRatio);
+```
+
+**Note**: Vidaa does not expose manufacturer or model information through web APIs.
+
+## Code Example
+
+Complete example for Vidaa platform:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, Platform, KeyAction } from 'adgent-sdk';
+
+// Initialize platform adapter
+const adapter = getPlatformAdapter();
+
+if (adapter.platform !== Platform.Vidaa) {
+  console.warn('Not running on Vidaa platform');
+}
+
+// Configure SDK with Vidaa-optimized settings
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 2500, // Conservative for Vidaa hardware
+  mutedAutoplay: true,
+  timeout: 8000, // Slightly longer timeout for slower network
+  onStart: () => {
+    console.log('Ad started on Vidaa TV');
+  },
+  onComplete: () => {
+    console.log('Ad completed');
+  },
+  onError: (error) => {
+    console.error('Vidaa ad error:', error);
+    // Graceful fallback important on Vidaa
+  }
+});
+
+// Handle Vidaa remote control
+document.addEventListener('keydown', async (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Back:
+      // Handles both back (8) and escape (27)
+      await sdk.stop();
+      break;
+      
+    case KeyAction.Play:
+      await sdk.resume();
+      break;
+      
+    case KeyAction.Pause:
+      await sdk.pause();
+      break;
+      
+    case KeyAction.Enter:
+      // Handle ad click
+      await sdk.skip();
+      break;
+  }
+});
+
+// Initialize and play
+await sdk.init();
+await sdk.play();
+```
+
+## Known Limitations
+
+### Hardware Constraints
+
+- **Lower Processing Power**: Vidaa TVs typically use budget chipsets
+- **Memory Limits**: Strict memory constraints compared to premium platforms
+- **Network Performance**: WiFi chips may struggle with high bitrates
+
+### Codec Support
+
+- **HEVC**: Not available on Vidaa 2.x, limited on Vidaa U3
+- **VP9**: Rarely supported
+- **H.264 Required**: Always provide H.264 fallback (mandatory)
+- **4K Playback**: Unstable on most models, use 1080p maximum
+
+### Bitrate Recommendations
+
+- **Maximum**: 3000 kbps to prevent buffering
+- **Recommended**: 1500-2500 kbps
+- **Minimum**: 800 kbps for smooth playback
+
+### Key Mapping Limitations
+
+- No color button support (Red, Green, Yellow, Blue)
+- No volume/mute controls exposed to web apps
+- No channel up/down controls
+- Limited media key support compared to Tizen/WebOS
+
+### Video Features
+
+- **No HDR**: Most Vidaa models lack HDR support
+- **No Dolby Vision**: Not supported
+- **No Hardware Decode Info**: Platform does not expose decode capabilities
+- **Basic Fullscreen**: Limited fullscreen API support
+
+### External Links
+
+- Opening external links via `openExternalLink()` is **not supported**
+- The method will log a warning and return without action
+
+## Performance Optimization
+
+### Recommended Configuration
+
+```typescript
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // Optimized for Vidaa constraints
+  targetBitrate: 1500,      // Low bitrate for stability
+  timeout: 10000,            // Longer timeout for slower network
+  maxWrapperDepth: 3,        // Reduce wrapper chain depth
+  mutedAutoplay: true,       // Required for autoplay
+  
+  onError: (error) => {
+    // Always implement graceful fallback on Vidaa
+    console.error('Ad failed, continuing to content');
+    // Resume main content playback
+  }
+});
+```
+
+### Video Encoding Guidelines
+
+For optimal Vidaa playback:
+
+1. **Codec**: H.264 Main Profile Level 4.0
+2. **Resolution**: 1920x1080 maximum (720p for older models)
+3. **Bitrate**: 1500 kbps target, 2500 kbps maximum
+4. **Frame Rate**: 30fps (avoid 60fps)
+5. **Audio**: AAC-LC, 128 kbps
+6. **Container**: MP4
+
+### Memory Management
+
+```typescript
+// Clean up resources when done
+await sdk.destroy();
+
+// For long-running apps, periodically check memory
+if (performance.memory?.usedJSHeapSize > 50_000_000) {
+  console.warn('High memory usage detected');
+  // Consider reloading page or clearing cache
+}
+```
+
+## Debugging
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Enable debug logging
+adapter.debug('Ad playback started on Vidaa');
+
+// Check capabilities
+console.log('Capabilities:', adapter.capabilities);
+console.log('HEVC support:', adapter.isCodecSupported('video/mp4; codecs="hvc1"'));
+```
+
+## Best Practices
+
+1. **Conservative Bitrates**: Always use lower bitrates (1500-2500 kbps)
+2. **H.264 Only**: Do not rely on HEVC or VP9 codec support
+3. **Handle Both Back Keys**: Support both keyCode 8 and 27 for back button
+4. **Graceful Degradation**: Always implement error fallbacks
+5. **Test on Real Hardware**: Emulators do not accurately represent Vidaa constraints
+6. **Avoid 4K Content**: Use 1080p maximum resolution
+7. **Clean Up Aggressively**: Call `sdk.destroy()` to free memory
+8. **Monitor Performance**: Track playback errors and adjust bitrate accordingly
+
+## See Also
+
+- [Platform Detection](/core/platform-adapter)
+- [Key Code Normalization](/guides/remote-control)
+- [Video Optimization](/guides/video-optimization)
+- [Performance Guidelines](/guides/performance)

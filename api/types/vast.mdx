@@ -1,0 +1,839 @@
+---
+title: "VAST Types"
+description: "VAST 4.x type definitions based on IAB specification"
+---
+
+Type definitions for parsing and handling VAST (Video Ad Serving Template) 4.x responses.
+
+<Note>
+  These types conform to the IAB VAST 4.x specification. For more information, see the [official VAST documentation](https://iabtechlab.com/standards/vast/).
+</Note>
+
+## VASTResponse
+
+Root VAST response structure returned by the parser.
+
+```typescript
+interface VASTResponse {
+  version: string;
+  ads: Ad[];
+  errors: string[];
+}
+```
+
+<ResponseField name="version" type="string">
+  VAST version from the XML (e.g., "4.0", "4.1", "4.2").
+</ResponseField>
+
+<ResponseField name="ads" type="Ad[]">
+  Array of parsed [Ad](#ad) elements from the VAST response.
+</ResponseField>
+
+<ResponseField name="errors" type="string[]">
+  Error tracking URLs from the VAST document.
+</ResponseField>
+
+---
+
+## Ad
+
+Represents a single ad element. Can be either inline or wrapper.
+
+```typescript
+interface Ad {
+  id: string;
+  sequence?: number;
+  adSystem?: AdSystem;
+  adTitle?: string;
+  impressions: Impression[];
+  creatives: Creative[];
+  errors: string[];
+  wrapper?: Wrapper;
+  inLine?: InLine;
+}
+```
+
+<ResponseField name="id" type="string">
+  Unique identifier for the ad.
+</ResponseField>
+
+<ResponseField name="sequence" type="number">
+  Playback sequence for ad pods. Lower numbers play first.
+</ResponseField>
+
+<ResponseField name="adSystem" type="AdSystem">
+  Information about the ad server. See [AdSystem](#adsystem).
+</ResponseField>
+
+<ResponseField name="adTitle" type="string">
+  Title of the advertisement.
+</ResponseField>
+
+<ResponseField name="impressions" type="Impression[]">
+  Impression tracking URLs. See [Impression](#impression).
+</ResponseField>
+
+<ResponseField name="creatives" type="Creative[]">
+  Creative elements (linear, non-linear, companion). See [Creative](#creative).
+</ResponseField>
+
+<ResponseField name="errors" type="string[]">
+  Error tracking URLs specific to this ad.
+</ResponseField>
+
+<ResponseField name="wrapper" type="Wrapper">
+  Present if this is a wrapper ad that points to another VAST tag. See [Wrapper](#wrapper).
+</ResponseField>
+
+<ResponseField name="inLine" type="InLine">
+  Present if this is an inline ad with direct creative content. See [InLine](#inline).
+</ResponseField>
+
+---
+
+## AdSystem
+
+Identifies the ad server that returned the ad.
+
+```typescript
+interface AdSystem {
+  name: string;
+  version?: string;
+}
+```
+
+<ResponseField name="name" type="string">
+  Name of the ad server system.
+</ResponseField>
+
+<ResponseField name="version" type="string">
+  Version of the ad server.
+</ResponseField>
+
+---
+
+## InLine
+
+Inline ad content with direct creative elements.
+
+```typescript
+interface InLine {
+  adTitle: string;
+  description?: string;
+  advertiser?: string;
+  pricing?: Pricing;
+  survey?: string;
+  category?: Category[];
+  creatives: Creative[];
+}
+```
+
+<ResponseField name="adTitle" type="string">
+  Title of the advertisement.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Description of the ad content.
+</ResponseField>
+
+<ResponseField name="advertiser" type="string">
+  Name of the advertiser.
+</ResponseField>
+
+<ResponseField name="pricing" type="Pricing">
+  Pricing information. See [Pricing](#pricing).
+</ResponseField>
+
+<ResponseField name="survey" type="string">
+  URL to an optional survey.
+</ResponseField>
+
+<ResponseField name="category" type="Category[]">
+  Content categories. See [Category](#category).
+</ResponseField>
+
+<ResponseField name="creatives" type="Creative[]">
+  Creative elements for this inline ad.
+</ResponseField>
+
+---
+
+## Wrapper
+
+Wrapper ad that redirects to another VAST tag.
+
+```typescript
+interface Wrapper {
+  vastAdTagURI: string;
+  followAdditionalWrappers?: boolean;
+  allowMultipleAds?: boolean;
+  fallbackOnNoAd?: boolean;
+}
+```
+
+<ResponseField name="vastAdTagURI" type="string">
+  URL to the wrapped VAST tag.
+</ResponseField>
+
+<ResponseField name="followAdditionalWrappers" type="boolean">
+  Whether to follow additional wrapper redirects.
+</ResponseField>
+
+<ResponseField name="allowMultipleAds" type="boolean">
+  Whether multiple ads are allowed in the wrapped response.
+</ResponseField>
+
+<ResponseField name="fallbackOnNoAd" type="boolean">
+  Whether to use fallback if wrapped VAST returns no ads.
+</ResponseField>
+
+---
+
+## Impression
+
+Impression tracking pixel URL.
+
+```typescript
+interface Impression {
+  id?: string;
+  url: string;
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier for the impression.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Impression tracking URL to fire when ad is displayed.
+</ResponseField>
+
+---
+
+## Creative
+
+Creative element containing linear video, non-linear overlays, or companion ads.
+
+```typescript
+interface Creative {
+  id?: string;
+  sequence?: number;
+  adId?: string;
+  linear?: Linear;
+  nonLinearAds?: NonLinearAd[];
+  companionAds?: CompanionAd[];
+}
+```
+
+<ResponseField name="id" type="string">
+  Unique identifier for the creative.
+</ResponseField>
+
+<ResponseField name="sequence" type="number">
+  Playback sequence for multiple creatives.
+</ResponseField>
+
+<ResponseField name="adId" type="string">
+  Reference to the parent ad ID.
+</ResponseField>
+
+<ResponseField name="linear" type="Linear">
+  Linear video creative. See [Linear](#linear).
+</ResponseField>
+
+<ResponseField name="nonLinearAds" type="NonLinearAd[]">
+  Non-linear overlay ads. See [NonLinearAd](#nonlinearad).
+</ResponseField>
+
+<ResponseField name="companionAds" type="CompanionAd[]">
+  Companion banner ads. See [CompanionAd](#companionad).
+</ResponseField>
+
+---
+
+## Linear
+
+Linear video creative with media files and tracking.
+
+```typescript
+interface Linear {
+  duration: number;
+  skipOffset?: number;
+  mediaFiles: MediaFile[];
+  trackingEvents: TrackingEvent[];
+  videoClicks?: VideoClicks;
+  adParameters?: string;
+  icons?: Icon[];
+}
+```
+
+<ResponseField name="duration" type="number">
+  Total duration of the video in seconds.
+</ResponseField>
+
+<ResponseField name="skipOffset" type="number">
+  Time in seconds after which skip button becomes available.
+</ResponseField>
+
+<ResponseField name="mediaFiles" type="MediaFile[]">
+  Available media file options. See [MediaFile](#mediafile).
+</ResponseField>
+
+<ResponseField name="trackingEvents" type="TrackingEvent[]">
+  Tracking URLs for various playback events. See [TrackingEvent](#trackingevent).
+</ResponseField>
+
+<ResponseField name="videoClicks" type="VideoClicks">
+  Click tracking and click-through URLs. See [VideoClicks](#videoclicks).
+</ResponseField>
+
+<ResponseField name="adParameters" type="string">
+  Custom parameters to pass to the creative.
+</ResponseField>
+
+<ResponseField name="icons" type="Icon[]">
+  Icon overlays (e.g., AdChoices). See [Icon](#icon).
+</ResponseField>
+
+---
+
+## MediaFile
+
+Video file reference with codec and quality information.
+
+```typescript
+interface MediaFile {
+  id?: string;
+  url: string;
+  delivery: 'progressive' | 'streaming';
+  type: string;
+  width: number;
+  height: number;
+  bitrate?: number;
+  minBitrate?: number;
+  maxBitrate?: number;
+  scalable?: boolean;
+  maintainAspectRatio?: boolean;
+  codec?: string;
+  apiFramework?: string;
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier for the media file.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  URL to the video file.
+</ResponseField>
+
+<ResponseField name="delivery" type="'progressive' | 'streaming'">
+  Delivery method: `progressive` (HTTP download) or `streaming` (HLS/DASH).
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  MIME type with optional codec (e.g., `video/mp4`, `video/mp4; codecs="avc1.42E01E"`).
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Video width in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Video height in pixels.
+</ResponseField>
+
+<ResponseField name="bitrate" type="number">
+  Target bitrate in kbps.
+</ResponseField>
+
+<ResponseField name="minBitrate" type="number">
+  Minimum bitrate for adaptive streaming.
+</ResponseField>
+
+<ResponseField name="maxBitrate" type="number">
+  Maximum bitrate for adaptive streaming.
+</ResponseField>
+
+<ResponseField name="scalable" type="boolean">
+  Whether the media file can be scaled.
+</ResponseField>
+
+<ResponseField name="maintainAspectRatio" type="boolean">
+  Whether to maintain aspect ratio when scaling.
+</ResponseField>
+
+<ResponseField name="codec" type="string">
+  Video codec identifier.
+</ResponseField>
+
+<ResponseField name="apiFramework" type="string">
+  API framework required for playback (e.g., "VPAID").
+</ResponseField>
+
+---
+
+## TrackingEvent
+
+Tracking URL for specific playback events.
+
+```typescript
+interface TrackingEvent {
+  event: TrackingEventType;
+  url: string;
+  offset?: number;
+}
+```
+
+<ResponseField name="event" type="TrackingEventType">
+  Type of event to track. See [TrackingEventType](#trackingeventtype).
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Tracking pixel URL to fire when event occurs.
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  Time offset in seconds for progress events.
+</ResponseField>
+
+---
+
+## TrackingEventType
+
+Supported tracking event types per VAST 4.x specification.
+
+```typescript
+type TrackingEventType =
+  | 'creativeView'
+  | 'start'
+  | 'firstQuartile'
+  | 'midpoint'
+  | 'thirdQuartile'
+  | 'complete'
+  | 'mute'
+  | 'unmute'
+  | 'pause'
+  | 'resume'
+  | 'rewind'
+  | 'skip'
+  | 'playerExpand'
+  | 'playerCollapse'
+  | 'progress'
+  | 'closeLinear'
+  | 'loaded'
+  | 'impression'
+  | 'error';
+```
+
+Standard VAST tracking events for video playback analytics.
+
+---
+
+## VideoClicks
+
+Click tracking and click-through URL configuration.
+
+```typescript
+interface VideoClicks {
+  clickThrough?: ClickThrough;
+  clickTracking?: ClickTracking[];
+  customClick?: CustomClick[];
+}
+```
+
+<ResponseField name="clickThrough" type="ClickThrough">
+  Primary click-through destination. See [ClickThrough](#clickthrough).
+</ResponseField>
+
+<ResponseField name="clickTracking" type="ClickTracking[]">
+  Click tracking pixels. See [ClickTracking](#clicktracking).
+</ResponseField>
+
+<ResponseField name="customClick" type="CustomClick[]">
+  Custom click tracking URLs. See [CustomClick](#customclick).
+</ResponseField>
+
+---
+
+## ClickThrough
+
+Primary click-through URL for the ad.
+
+```typescript
+interface ClickThrough {
+  id?: string;
+  url: string;
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Landing page URL when user clicks the ad.
+</ResponseField>
+
+---
+
+## ClickTracking
+
+Click tracking pixel URL.
+
+```typescript
+interface ClickTracking {
+  id?: string;
+  url: string;
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Tracking URL to fire when ad is clicked.
+</ResponseField>
+
+---
+
+## CustomClick
+
+Custom click tracking URL.
+
+```typescript
+interface CustomClick {
+  id?: string;
+  url: string;
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Custom tracking URL.
+</ResponseField>
+
+---
+
+## NonLinearAd
+
+Non-linear overlay ad (banner over video).
+
+```typescript
+interface NonLinearAd {
+  id?: string;
+  width: number;
+  height: number;
+  minSuggestedDuration?: number;
+  staticResource?: string;
+  iFrameResource?: string;
+  htmlResource?: string;
+  nonLinearClickThrough?: string;
+  trackingEvents: TrackingEvent[];
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Width in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height in pixels.
+</ResponseField>
+
+<ResponseField name="minSuggestedDuration" type="number">
+  Minimum suggested display duration in seconds.
+</ResponseField>
+
+<ResponseField name="staticResource" type="string">
+  URL to static image resource.
+</ResponseField>
+
+<ResponseField name="iFrameResource" type="string">
+  URL to iframe resource.
+</ResponseField>
+
+<ResponseField name="htmlResource" type="string">
+  HTML content as string.
+</ResponseField>
+
+<ResponseField name="nonLinearClickThrough" type="string">
+  Click-through URL for the overlay.
+</ResponseField>
+
+<ResponseField name="trackingEvents" type="TrackingEvent[]">
+  Tracking events for the overlay.
+</ResponseField>
+
+---
+
+## CompanionAd
+
+Companion banner ad displayed alongside video.
+
+```typescript
+interface CompanionAd {
+  id?: string;
+  width: number;
+  height: number;
+  staticResource?: string;
+  iFrameResource?: string;
+  htmlResource?: string;
+  companionClickThrough?: string;
+  trackingEvents: TrackingEvent[];
+}
+```
+
+<ResponseField name="id" type="string">
+  Optional identifier.
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Width in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height in pixels.
+</ResponseField>
+
+<ResponseField name="staticResource" type="string">
+  URL to static image resource.
+</ResponseField>
+
+<ResponseField name="iFrameResource" type="string">
+  URL to iframe resource.
+</ResponseField>
+
+<ResponseField name="htmlResource" type="string">
+  HTML content as string.
+</ResponseField>
+
+<ResponseField name="companionClickThrough" type="string">
+  Click-through URL for the companion ad.
+</ResponseField>
+
+<ResponseField name="trackingEvents" type="TrackingEvent[]">
+  Tracking events for the companion ad.
+</ResponseField>
+
+---
+
+## Icon
+
+Icon overlay (e.g., AdChoices icon).
+
+```typescript
+interface Icon {
+  program?: string;
+  width: number;
+  height: number;
+  xPosition: string | number;
+  yPosition: string | number;
+  duration?: number;
+  offset?: number;
+  staticResource?: string;
+  iFrameResource?: string;
+  htmlResource?: string;
+  iconClicks?: IconClicks;
+}
+```
+
+<ResponseField name="program" type="string">
+  Industry initiative program (e.g., "AdChoices").
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  Width in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height in pixels.
+</ResponseField>
+
+<ResponseField name="xPosition" type="string | number">
+  Horizontal position (pixel value or "left"/"right").
+</ResponseField>
+
+<ResponseField name="yPosition" type="string | number">
+  Vertical position (pixel value or "top"/"bottom").
+</ResponseField>
+
+<ResponseField name="duration" type="number">
+  Display duration in seconds.
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  Time offset in seconds when icon should appear.
+</ResponseField>
+
+<ResponseField name="staticResource" type="string">
+  URL to static image resource.
+</ResponseField>
+
+<ResponseField name="iFrameResource" type="string">
+  URL to iframe resource.
+</ResponseField>
+
+<ResponseField name="htmlResource" type="string">
+  HTML content as string.
+</ResponseField>
+
+<ResponseField name="iconClicks" type="IconClicks">
+  Click handling for the icon. See [IconClicks](#iconclicks).
+</ResponseField>
+
+---
+
+## IconClicks
+
+Click handling for icon overlays.
+
+```typescript
+interface IconClicks {
+  iconClickThrough?: string;
+  iconClickTracking?: string[];
+}
+```
+
+<ResponseField name="iconClickThrough" type="string">
+  Click-through URL for the icon.
+</ResponseField>
+
+<ResponseField name="iconClickTracking" type="string[]">
+  Click tracking URLs for the icon.
+</ResponseField>
+
+---
+
+## Pricing
+
+Pricing model information.
+
+```typescript
+interface Pricing {
+  model: 'cpm' | 'cpc' | 'cpe' | 'cpv';
+  currency: string;
+  value: number;
+}
+```
+
+<ResponseField name="model" type="'cpm' | 'cpc' | 'cpe' | 'cpv'">
+  Pricing model:
+  - `cpm` - Cost per thousand impressions
+  - `cpc` - Cost per click
+  - `cpe` - Cost per engagement
+  - `cpv` - Cost per view
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code (e.g., "USD", "EUR").
+</ResponseField>
+
+<ResponseField name="value" type="number">
+  Price value in the specified currency.
+</ResponseField>
+
+---
+
+## Category
+
+Content category classification.
+
+```typescript
+interface Category {
+  authority?: string;
+  value: string;
+}
+```
+
+<ResponseField name="authority" type="string">
+  Authority defining the category taxonomy.
+</ResponseField>
+
+<ResponseField name="value" type="string">
+  Category value.
+</ResponseField>
+
+---
+
+## VASTErrorCode
+
+Standard VAST error codes per IAB specification.
+
+```typescript
+enum VASTErrorCode {
+  XML_PARSING_ERROR = 100,
+  VAST_SCHEMA_VALIDATION_ERROR = 101,
+  VAST_VERSION_NOT_SUPPORTED = 102,
+  GENERAL_WRAPPER_ERROR = 300,
+  WRAPPER_TIMEOUT = 301,
+  WRAPPER_LIMIT_REACHED = 302,
+  NO_VAST_RESPONSE = 303,
+  GENERAL_LINEAR_ERROR = 400,
+  FILE_NOT_FOUND = 401,
+  MEDIA_TIMEOUT = 402,
+  MEDIA_NOT_SUPPORTED = 403,
+  GENERAL_COMPANION_ERROR = 600,
+  UNDEFINED_ERROR = 900
+}
+```
+
+<ResponseField name="XML_PARSING_ERROR" type="100">
+  Failed to parse VAST XML.
+</ResponseField>
+
+<ResponseField name="VAST_SCHEMA_VALIDATION_ERROR" type="101">
+  VAST XML does not conform to schema.
+</ResponseField>
+
+<ResponseField name="VAST_VERSION_NOT_SUPPORTED" type="102">
+  VAST version is not supported by the player.
+</ResponseField>
+
+<ResponseField name="GENERAL_WRAPPER_ERROR" type="300">
+  General wrapper ad error.
+</ResponseField>
+
+<ResponseField name="WRAPPER_TIMEOUT" type="301">
+  Wrapper ad request timed out.
+</ResponseField>
+
+<ResponseField name="WRAPPER_LIMIT_REACHED" type="302">
+  Maximum wrapper depth exceeded.
+</ResponseField>
+
+<ResponseField name="NO_VAST_RESPONSE" type="303">
+  No VAST response received from wrapper.
+</ResponseField>
+
+<ResponseField name="GENERAL_LINEAR_ERROR" type="400">
+  General linear creative error.
+</ResponseField>
+
+<ResponseField name="FILE_NOT_FOUND" type="401">
+  Media file not found or failed to load.
+</ResponseField>
+
+<ResponseField name="MEDIA_TIMEOUT" type="402">
+  Media file request timed out.
+</ResponseField>
+
+<ResponseField name="MEDIA_NOT_SUPPORTED" type="403">
+  No supported media files available.
+</ResponseField>
+
+<ResponseField name="GENERAL_COMPANION_ERROR" type="600">
+  General companion ad error.
+</ResponseField>
+
+<ResponseField name="UNDEFINED_ERROR" type="900">
+  Undefined error occurred.
+</ResponseField>

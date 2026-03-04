@@ -1,0 +1,395 @@
+---
+title: 'AdTracker'
+description: 'Fire-and-forget pixel tracking with sendBeacon/fetch fallback'
+icon: 'radar'
+---
+
+## Overview
+
+The `AdTracker` class manages VAST tracking pixels using a fire-and-forget strategy. It uses `navigator.sendBeacon()` when available, falls back to `fetch()` with keepalive, and ultimately to image beacons for maximum compatibility.
+
+## Features
+
+- **Fire-and-forget**: No waiting for responses, no error handling required
+- **Beacon API**: Uses `sendBeacon()` for reliable delivery even on page unload
+- **Automatic fallback**: Falls back to `fetch(keepalive)` and image beacons
+- **Macro replacement**: Replaces VAST macros in tracking URLs
+- **Deduplication**: Prevents duplicate event firing with once-only tracking
+
+## Constructor
+
+```typescript
+import { AdTracker } from 'adgent-sdk';
+
+const tracker = new AdTracker(events, config);
+```
+
+<ParamField path="events" type="TrackingEvent[]" default="[]">
+  Array of tracking events from VAST (use `VASTParser.aggregateTrackingEvents()`)
+</ParamField>
+
+<ParamField path="config" type="TrackerConfig" default="{}">
+  Configuration object (all fields optional)
+  
+  <Expandable title="properties">
+    <ParamField path="debug" type="boolean" default="false">
+      Enable debug logging to console
+    </ParamField>
+    
+    <ParamField path="retry" type="boolean" default="false">
+      Retry failed requests (not recommended for fire-and-forget)
+    </ParamField>
+    
+    <ParamField path="maxRetries" type="number" default="3">
+      Maximum retry attempts (only used if retry is true)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Methods
+
+### track()
+
+Track a specific VAST event type.
+
+```typescript
+tracker.track('start');
+tracker.track('firstQuartile');
+tracker.track('complete');
+```
+
+**Parameters**:
+- `eventType: TrackingEventType` - The VAST event type to track
+- `once?: boolean` - Only fire once per event type (default: `true`)
+
+**Event Types**:
+- `start` - Ad started
+- `firstQuartile` - 25% progress
+- `midpoint` - 50% progress
+- `thirdQuartile` - 75% progress
+- `complete` - 100% progress
+- `pause` - Playback paused
+- `resume` - Playback resumed
+- `skip` - Ad skipped
+- `mute` - Audio muted
+- `unmute` - Audio unmuted
+- `creativeView` - Creative viewed
+- `click` - Ad clicked
+- And more (see TrackingEventType)
+
+**Behavior**:
+- Groups events by type and fires all matching URLs
+- Skips duplicates if `once` is true (default)
+- Replaces macros before firing
+- Fires and forgets (no error handling)
+
+### firePixel()
+
+Fire a single tracking pixel (fire-and-forget).
+
+```typescript
+tracker.firePixel('https://example.com/track?event=impression');
+```
+
+**Parameters**:
+- `url: string` - Tracking URL to fire
+
+**Method Selection** (src/core/AdTracker.ts:101):
+1. **sendBeacon**: If platform supports it (most reliable)
+2. **fetch(keepalive)**: If sendBeacon fails or unavailable
+3. **Image beacon**: Final fallback for maximum compatibility
+
+<Tip>
+`sendBeacon()` is the preferred method because it ensures delivery even when the page is unloading or navigating away.
+</Tip>
+
+### fireImpressions()
+
+Fire impression pixels.
+
+```typescript
+const impressionUrls = parser.aggregateImpressions(ads);
+tracker.fireImpressions(impressionUrls);
+```
+
+**Parameters**:
+- `impressionUrls: string[]` - Array of impression URLs
+
+**When to call**: After video playback starts (after `play()` succeeds).
+
+### fireError()
+
+Fire error tracking with error code.
+
+```typescript
+tracker.fireError(errorUrls, VASTErrorCode.FILE_NOT_FOUND);
+```
+
+**Parameters**:
+- `errorUrls: string[]` - Array of error tracking URLs
+- `errorCode: number` - VAST error code
+
+**Macro replacement**: Replaces `[ERRORCODE]` macro with the provided code.
+
+### updateMacroContext()
+
+Update macro context for URL replacement.
+
+```typescript
+tracker.updateMacroContext({
+  assetUri: 'https://cdn.example.com/ad.mp4',
+  adPlayhead: 12.5,
+  contentPlayhead: 450
+});
+```
+
+**Parameters**:
+- `context: Partial<MacroContext>` - Macro values to merge into context
+
+**Common macros**:
+- `assetUri` - Media file URL (replaces `[ASSETURI]`)
+- `adPlayhead` - Current ad time (replaces `[ADPLAYHEAD]`)
+- `contentPlayhead` - Current content time (replaces `[CONTENTPLAYHEAD]`)
+- `errorCode` - Error code (replaces `[ERRORCODE]`)
+- `cachebusting` - Random number (replaces `[CACHEBUSTING]`)
+- `timestamp` - Unix timestamp (replaces `[TIMESTAMP]`)
+
+<Note>
+Macro replacement happens automatically before firing pixels. Update the context as values change (e.g., update `adPlayhead` on timeupdate).
+</Note>
+
+### reset()
+
+Reset fired events (for replay scenarios).
+
+```typescript
+tracker.reset();
+```
+
+Clears the internal set of fired events, allowing them to be tracked again.
+
+## Example Usage
+
+### Basic Tracking
+
+```typescript
+import { VASTParser, AdTracker } from 'adgent-sdk';
+
+const parser = new VASTParser();
+const result = await parser.parse('https://example.com/vast.xml');
+
+if (result.success) {
+  const ads = result.response.ads;
+  
+  // Aggregate tracking events
+  const events = parser.aggregateTrackingEvents(ads);
+  
+  // Create tracker
+  const tracker = new AdTracker(events, { debug: true });
+  
+  // Update context
+  tracker.updateMacroContext({
+    assetUri: 'https://cdn.example.com/ad.mp4'
+  });
+  
+  // Fire impression when playback starts
+  const impressions = parser.aggregateImpressions(ads);
+  tracker.fireImpressions(impressions);
+  
+  // Track start event
+  tracker.track('start');
+  tracker.track('creativeView');
+}
+```
+
+### With Video Player
+
+```typescript
+const tracker = new AdTracker(events);
+const video = document.querySelector('video');
+
+video.addEventListener('play', () => {
+  tracker.track('start');
+});
+
+video.addEventListener('pause', () => {
+  tracker.track('pause');
+});
+
+video.addEventListener('playing', () => {
+  tracker.track('resume');
+});
+
+video.addEventListener('ended', () => {
+  tracker.track('complete');
+});
+
+video.addEventListener('timeupdate', () => {
+  // Update playhead macro
+  tracker.updateMacroContext({
+    adPlayhead: video.currentTime
+  });
+  
+  // Fire quartiles
+  const percentage = (video.currentTime / video.duration) * 100;
+  
+  if (percentage >= 25 && !firedQuartiles.has(25)) {
+    tracker.track('firstQuartile');
+    firedQuartiles.add(25);
+  }
+  if (percentage >= 50 && !firedQuartiles.has(50)) {
+    tracker.track('midpoint');
+    firedQuartiles.add(50);
+  }
+  if (percentage >= 75 && !firedQuartiles.has(75)) {
+    tracker.track('thirdQuartile');
+    firedQuartiles.add(75);
+  }
+});
+```
+
+### Error Tracking
+
+```typescript
+import { AdTracker, VASTErrorCode } from 'adgent-sdk';
+
+const ads = result.response.ads;
+const errorUrls = ads.flatMap(ad => ad.errors);
+
+const tracker = new AdTracker(events);
+
+try {
+  await video.play();
+} catch (error) {
+  // Fire error pixels
+  tracker.fireError(errorUrls, VASTErrorCode.GENERAL_LINEAR_ERROR);
+}
+```
+
+### Custom Pixel Firing
+
+```typescript
+const tracker = new AdTracker(events);
+
+// Fire custom tracking URL
+tracker.firePixel('https://example.com/custom-event?id=123');
+
+// Fire with macros
+tracker.updateMacroContext({ customValue: 'test' });
+tracker.firePixel('https://example.com/track?val=[CUSTOMVALUE]');
+```
+
+### Replay Scenario
+
+```typescript
+const tracker = new AdTracker(events);
+
+// First play
+tracker.track('start');
+tracker.track('complete');
+
+// Reset for replay
+tracker.reset();
+
+// Second play (events will fire again)
+tracker.track('start');
+tracker.track('complete');
+```
+
+## Beacon Methods
+
+### sendBeacon()
+
+Most reliable method - guaranteed delivery even on page unload:
+
+```typescript
+if (navigator.sendBeacon(url)) {
+  return; // Success
+}
+```
+
+**Availability**: Checked via `PlatformAdapter.capabilities.sendBeacon`
+
+### fetch(keepalive)
+
+Fallback when sendBeacon unavailable:
+
+```typescript
+fetch(url, {
+  method: 'GET',
+  keepalive: true,
+  mode: 'no-cors',
+  credentials: 'omit'
+});
+```
+
+**Availability**: Checked via `PlatformAdapter.capabilities.fetchKeepalive`
+
+### Image Beacon
+
+Final fallback for maximum compatibility:
+
+```typescript
+const img = new Image(1, 1);
+img.src = url;
+```
+
+Works on all platforms but least reliable (may not fire if page unloads quickly).
+
+## Macro Replacement
+
+The tracker automatically replaces VAST macros before firing pixels:
+
+```typescript
+// Original URL
+'https://example.com/track?asset=[ASSETURI]&time=[ADPLAYHEAD]&cb=[CACHEBUSTING]'
+
+// After replacement
+'https://example.com/track?asset=https%3A%2F%2Fcdn.example.com%2Fad.mp4&time=12.5&cb=1234567890'
+```
+
+**Supported macros**:
+- `[ASSETURI]` - Media file URL
+- `[ADPLAYHEAD]` - Current ad time in seconds
+- `[CONTENTPLAYHEAD]` - Current content time
+- `[ERRORCODE]` - VAST error code
+- `[CACHEBUSTING]` - Random number (auto-generated)
+- `[TIMESTAMP]` - Unix timestamp (auto-generated)
+
+See [replaceMacros](/api/utils/replace-macros) for full list.
+
+## Platform Compatibility
+
+The tracker handles platform-specific quirks:
+
+### Beacon API Support
+
+Detected via [PlatformAdapter](/api/platform-adapter):
+
+- **Tizen**: Full support
+- **WebOS**: Full support
+- **FireTV**: Full support
+- **Roku**: Limited (uses fetch fallback)
+- **Generic browsers**: Depends on browser version
+
+### Keepalive Support
+
+Most modern platforms support `fetch(keepalive)` as a fallback.
+
+### Image Beacon Fallback
+
+Works universally on all platforms.
+
+## Related Types
+
+- [TrackingEvent](/api/types/tracking-event)
+- [TrackingEventType](/api/types/tracking-event-type)
+- [MacroContext](/api/types/macro-context)
+- [VASTErrorCode](/api/types/vast-error-code)
+
+## See Also
+
+- [AdgentSDK](/api/adgent-sdk) - Main player class
+- [VASTParser](/api/vast-parser) - VAST parsing
+- [replaceMacros](/api/utils/replace-macros) - Macro replacement utility
+- [PlatformAdapter](/api/platform-adapter) - Platform detection

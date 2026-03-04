@@ -1,0 +1,149 @@
+---
+title: Migration Guide
+description: Upgrade instructions and breaking changes for Adgent SDK
+---
+
+<Info>
+  Adgent SDK is currently at **v0.1.10** (early version). This guide will be updated with migration instructions as new versions are released.
+</Info>
+
+## Current Version: 0.1.x
+
+The SDK is in its initial release phase. The API is stable for production use, but may evolve based on community feedback.
+
+### Stability Guarantee
+
+For the 0.1.x series:
+
+<CardGroup cols={2}>
+  <Card title="Stable" icon="check">
+    - Core API (AdgentSDK class)
+    - Event system
+    - Platform detection
+    - VAST 4.x parsing
+  </Card>
+  <Card title="May Change" icon="triangle-exclamation">
+    - Internal implementation details
+    - Non-public APIs
+    - Debug/logging behavior
+    - Error message formatting
+  </Card>
+</CardGroup>
+
+## Semantic Versioning
+
+Adgent SDK follows [Semantic Versioning (SemVer)](https://semver.org/):
+
+- **Major (1.0.0)**: Breaking changes to public API
+- **Minor (0.1.0)**: New features, backward compatible
+- **Patch (0.1.1)**: Bug fixes, backward compatible
+
+## Future Migration Paths
+
+### 0.1.x → 0.2.x (Future)
+
+When 0.2.0 is released, this section will document:
+
+- New features added
+- Deprecated APIs (if any)
+- Recommended upgrade steps
+
+### 0.x.x → 1.0.0 (Future)
+
+When 1.0.0 is released, this section will document:
+
+- API stabilization changes
+- Breaking changes (if any)
+- Migration code examples
+
+## Upgrade Best Practices
+
+<Steps>
+  <Step title="Check the changelog">
+    Review [Changelog](/resources/changelog) for new features and breaking changes
+  </Step>
+  
+  <Step title="Update dependencies">
+    ```bash
+    npm install adgent-sdk@latest
+    ```
+  </Step>
+  
+  <Step title="Run TypeScript checks">
+    ```bash
+    npx tsc --noEmit
+    ```
+    
+    TypeScript will catch breaking API changes at compile time.
+  </Step>
+  
+  <Step title="Test on target devices">
+    Always test upgrades on actual Smart TV hardware, not just desktop browsers.
+  </Step>
+  
+  <Step title="Monitor error rates">
+    Track error codes and playback success rates after upgrading.
+  </Step>
+</Steps>
+
+## TypeScript Support
+
+Adgent SDK ships with TypeScript type definitions:
+
+```typescript
+import { AdgentSDK, AdPlayerConfig } from 'adgent-sdk';
+
+// Types are automatically available
+const config: AdPlayerConfig = {
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 2500
+};
+
+const sdk = new AdgentSDK(config);
+```
+
+<Tip>
+  TypeScript will help catch breaking changes when upgrading. Enable `strict` mode in `tsconfig.json` for maximum safety.
+</Tip>
+
+## Reporting Issues
+
+If you encounter issues during migration:
+
+1. **Check the changelog**: Verify the change is documented
+2. **Review the API docs**: Confirm you're using the correct API
+3. **Test on multiple platforms**: Reproduce on WebOS, Tizen, etc.
+4. **Report on GitHub**: [Create an issue](https://github.com/lastninja294/adgent-sdk/issues)
+
+Include:
+- SDK version (before and after upgrade)
+- Platform (WebOS, Tizen, etc.)
+- Error messages or unexpected behavior
+- Minimal reproduction code
+
+## Version History
+
+For detailed version history, see:
+
+- [Changelog](/resources/changelog) - All release notes
+- [GitHub Releases](https://github.com/lastninja294/adgent-sdk/releases) - Tagged releases
+
+## Staying Updated
+
+To stay informed about new releases:
+
+<CardGroup cols={2}>
+  <Card title="Watch on GitHub" icon="github" href="https://github.com/lastninja294/adgent-sdk">
+    Get notifications for new releases
+  </Card>
+  <Card title="Check npm" icon="npm" href="https://www.npmjs.com/package/adgent-sdk">
+    View latest published version
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Changelog](/resources/changelog) - Version history
+- [Installation](/installation) - Getting started
+- [API Reference](/api/adgent-sdk) - Complete API documentation

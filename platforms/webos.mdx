@@ -1,0 +1,256 @@
+---
+title: 'LG WebOS'
+description: 'Smart TV platform adapter for LG WebOS TVs'
+---
+
+## Overview
+
+LG WebOS is the Smart TV platform used in LG televisions. The Adgent SDK provides native support for WebOS, including platform-specific remote control key codes, video player integration, and device capabilities detection.
+
+## Supported Versions
+
+- **WebOS 3.0+**: Fully supported
+- **Recommended**: WebOS 4.0 or higher for optimal performance
+
+## Platform Detection
+
+The SDK automatically detects WebOS platforms using the following patterns:
+
+- User agent matches `/Web0S/i` or `/WebOS/i`
+- User agent matches `/LG.*NetCast/i` or `/LGE.*TV/i`
+- Global object `window.webOS` or `window.PalmSystem` exists
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.WebOS) {
+  console.log('Running on LG WebOS');
+  console.log('Device info:', adapter.deviceInfo);
+}
+```
+
+## Platform-Specific Features
+
+### Native Video Player
+
+WebOS provides native video player integration with hardware acceleration support:
+
+```typescript
+const videoAttrs = adapter.getVideoAttributes();
+// Returns: { 'data-lg-immersive': 'true', muted: true, playsinline: true, ... }
+```
+
+### HDR & Advanced Codecs
+
+WebOS TVs support advanced video capabilities:
+
+- **HDR**: Full HDR support
+- **Dolby Vision**: Supported on compatible models
+- **Dolby Atmos**: Supported for audio
+- **HEVC (H.265)**: Hardware decode support
+- **4K Resolution**: Up to 3840x2160
+
+### Voice Control
+
+WebOS TVs include voice control capabilities through the Magic Remote:
+
+```typescript
+if (adapter.capabilities.voice) {
+  console.log('Voice control available');
+}
+```
+
+### Hardware Decode Info
+
+WebOS provides hardware video decode information for optimal streaming:
+
+```typescript
+if (adapter.capabilities.hardwareDecodeInfo) {
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 15000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'hevc'
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+## Remote Control Key Codes
+
+WebOS uses platform-specific key codes for remote control buttons:
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK/Select button |
+| **Back** | **461** | WebOS-specific back button |
+| Left | 37 | Navigate left |
+| Up | 38 | Navigate up |
+| Right | 39 | Navigate right |
+| Down | 40 | Navigate down |
+| Play | 415 | Play media |
+| Pause | 19 | Pause media |
+| Stop | 413 | Stop playback |
+| Fast Forward | 417 | Skip forward |
+| Rewind | 412 | Skip backward |
+| Info | 457 | Information button |
+| Red | 403 | Red color button |
+| Green | 404 | Green color button |
+| Yellow | 405 | Yellow color button |
+| Blue | 406 | Blue color button |
+| Channel Up | 33 | Channel up |
+| Channel Down | 34 | Channel down |
+
+### Key Code Normalization
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Normalize platform-specific key code to action
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Back) {
+    console.log('Back button pressed (key code 461)');
+    // Handle back navigation
+  }
+  
+  if (action === KeyAction.Enter) {
+    console.log('Enter button pressed');
+    // Handle selection
+  }
+});
+
+// Get all key codes for a specific action
+const backKeyCodes = adapter.getKeyCodesForAction(KeyAction.Back);
+console.log('Back key codes:', backKeyCodes); // [461]
+```
+
+## Device Information
+
+Access WebOS-specific device information:
+
+```typescript
+const adapter = getPlatformAdapter();
+const info = adapter.deviceInfo;
+
+console.log('Platform:', info.platform); // 'webos'
+console.log('Manufacturer:', info.manufacturer); // 'LG'
+console.log('Model:', info.model); // e.g., 'OLED55C1'
+console.log('OS Version:', info.osVersion);
+console.log('Screen:', `${info.screenWidth}x${info.screenHeight}`);
+```
+
+## Code Example
+
+Complete example for WebOS platform:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, Platform, KeyAction } from 'adgent-sdk';
+
+// Initialize platform adapter
+const adapter = getPlatformAdapter();
+
+if (adapter.platform !== Platform.WebOS) {
+  console.warn('Not running on WebOS platform');
+}
+
+// Configure SDK with WebOS-optimized settings
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 15000, // High bitrate for WebOS HDR
+  mutedAutoplay: true,
+  onStart: () => {
+    console.log('Ad started on WebOS TV');
+  },
+  onComplete: () => {
+    console.log('Ad completed');
+  },
+  onError: (error) => {
+    console.error('WebOS ad error:', error);
+  }
+});
+
+// Handle WebOS remote control
+document.addEventListener('keydown', async (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Back:
+      // WebOS back button (461)
+      await sdk.stop();
+      break;
+      
+    case KeyAction.PlayPause:
+      const state = sdk.getState();
+      if (state.paused) {
+        await sdk.resume();
+      } else {
+        await sdk.pause();
+      }
+      break;
+      
+    case KeyAction.Enter:
+      // Handle ad click
+      await sdk.skip();
+      break;
+  }
+});
+
+// Initialize and play
+await sdk.init();
+await sdk.play();
+```
+
+## Known Limitations
+
+### WebOS 3.0 Restrictions
+
+- Limited HDR support on WebOS 3.x (HDR10 only, no Dolby Vision)
+- 4K playback may be unstable on entry-level models
+- Voice control requires WebOS 3.5+
+
+### Network Performance
+
+- WebOS WiFi chips may struggle with bitrates > 10 Mbps on older models
+- Recommend using adaptive bitrate streaming for best results
+- External link opening (via `openExternalLink`) is supported but may require user confirmation
+
+### Memory Constraints
+
+- Long-running apps should call `sdk.destroy()` to free resources
+- Avoid loading multiple high-bitrate ads in quick succession
+- Monitor memory usage using `adapter.debug()` for WebOS toast notifications
+
+### Video Codec Support
+
+- HEVC support varies by model year (2016-2017 models have limited support)
+- VP9 codec support is inconsistent across WebOS versions
+- Always provide H.264 fallback for maximum compatibility
+
+## Debugging
+
+WebOS provides native toast notifications for debugging:
+
+```typescript
+const adapter = getPlatformAdapter();
+
+// Automatically shows WebOS toast notification
+adapter.debug('Ad playback started on WebOS');
+```
+
+## Best Practices
+
+1. **Use Native Video Attributes**: Apply WebOS-specific video attributes for immersive playback
+2. **Handle Back Button**: Always implement WebOS back button (key code 461) handling
+3. **Optimize Bitrate**: Use recommended 15 Mbps max for high-end WebOS TVs
+4. **Test on Real Hardware**: WebOS emulator behavior differs from actual TV hardware
+5. **Clean Up Resources**: Call `sdk.destroy()` when navigating away from ad playback
+
+## See Also
+
+- [Platform Detection](/core/platform-adapter)
+- [Key Code Normalization](/guides/remote-control)
+- [Video Capabilities](/guides/video-optimization)

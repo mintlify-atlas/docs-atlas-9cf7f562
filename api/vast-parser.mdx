@@ -1,0 +1,392 @@
+---
+title: 'VASTParser'
+description: 'Parse VAST XML and resolve wrapper chains'
+icon: 'code-merge'
+---
+
+## Overview
+
+The `VASTParser` class parses VAST XML documents and resolves wrapper chains recursively. It handles both inline ads and wrappers, aggregates tracking events, and selects the best media file based on bitrate and platform capabilities.
+
+## Constructor
+
+```typescript
+import { VASTParser } from 'adgent-sdk';
+
+const parser = new VASTParser(config);
+```
+
+<ParamField path="config" type="VASTParserConfig" default="{}">
+  Configuration object for the parser (all fields optional)
+  
+  <Expandable title="properties">
+    <ParamField path="maxWrapperDepth" type="number" default="5">
+      Maximum depth for resolving VAST wrapper chains (prevents infinite loops)
+    </ParamField>
+    
+    <ParamField path="timeout" type="number" default="10000">
+      Request timeout in milliseconds for fetching VAST documents
+    </ParamField>
+    
+    <ParamField path="debug" type="boolean" default="false">
+      Enable debug logging to console
+    </ParamField>
+    
+    <ParamField path="fetchFn" type="typeof fetch">
+      Custom fetch implementation (useful for testing or SSR)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Methods
+
+### parse()
+
+Parse a VAST URL and resolve all wrappers.
+
+```typescript
+const result = await parser.parse('https://example.com/vast.xml');
+
+if (result.success) {
+  console.log('Ads:', result.response.ads);
+} else {
+  console.error('Parse error:', result.error);
+}
+```
+
+**Parameters**:
+- `vastUrl: string` - URL to the VAST document
+
+**Returns**: `Promise<ParseResult>`
+
+```typescript
+interface ParseResult {
+  success: boolean;
+  response?: VASTResponse;
+  error?: {
+    code: VASTErrorCode;
+    message: string;
+  };
+}
+```
+
+**Process**:
+1. Fetches VAST XML with timeout
+2. Parses XML into structured objects
+3. Resolves wrapper chains recursively
+4. Merges tracking events from wrappers and nested ads
+5. Returns aggregated response
+
+### selectBestMediaFile()
+
+Select the best media file based on target bitrate and platform compatibility.
+
+```typescript
+const linear = ad.creatives[0].linear;
+const mediaFile = parser.selectBestMediaFile(linear.mediaFiles, 2500);
+
+if (mediaFile) {
+  console.log('Selected:', mediaFile.url);
+  console.log('Bitrate:', mediaFile.bitrate);
+}
+```
+
+**Parameters**:
+- `mediaFiles: MediaFile[]` - Array of media files from VAST
+- `targetBitrate?: number` - Target bitrate in kbps (default: 2500)
+
+**Returns**: `MediaFile | null`
+
+**Selection Logic** (src/core/VASTParser.ts:441):
+1. Filters to video MIME types only (blocks VPAID/JavaScript)
+2. Prefers MP4 files for maximum TV compatibility
+3. Penalizes 4K content (height > 1080) for performance
+4. Selects file closest to target bitrate
+5. Returns null if no suitable file found
+
+<Tip>
+The default targetBitrate of 2500 kbps prefers 1080p content over 4K, which provides better compatibility and performance on Smart TV platforms.
+</Tip>
+
+### aggregateTrackingEvents()
+
+Aggregate all tracking events from parsed ads.
+
+```typescript
+const events = parser.aggregateTrackingEvents(result.response.ads);
+console.log('Total tracking events:', events.length);
+```
+
+**Parameters**:
+- `ads: Ad[]` - Array of parsed ads
+
+**Returns**: `TrackingEvent[]`
+
+**Use Case**: Pass the result to [AdTracker](/api/ad-tracker) for automatic pixel firing.
+
+### aggregateImpressions()
+
+Get all impression URLs from parsed ads.
+
+```typescript
+const impressionUrls = parser.aggregateImpressions(result.response.ads);
+console.log('Impression URLs:', impressionUrls);
+```
+
+**Parameters**:
+- `ads: Ad[]` - Array of parsed ads
+
+**Returns**: `string[]`
+
+**Use Case**: Pass to AdTracker's `fireImpressions()` when playback starts.
+
+## Configuration Options
+
+### Max Wrapper Depth
+
+Controls how many levels of wrappers the parser will follow:
+
+```typescript
+const parser = new VASTParser({
+  maxWrapperDepth: 3 // Stop after 3 levels
+});
+```
+
+**Default**: 5
+
+**Recommendation**: Keep at 5 or lower to prevent slow ad loading and potential abuse.
+
+### Timeout
+
+Controls request timeout for fetching VAST documents:
+
+```typescript
+const parser = new VASTParser({
+  timeout: 5000 // 5 seconds
+});
+```
+
+**Default**: 10000 (10 seconds)
+
+**Recommendation**: Lower timeout (5-8s) for better user experience on slow networks.
+
+### Debug Mode
+
+Enable debug logging:
+
+```typescript
+const parser = new VASTParser({
+  debug: true
+});
+```
+
+Logs:
+- VAST fetch URLs and depth
+- Wrapper resolution
+- Parse errors
+
+### Custom Fetch
+
+Provide custom fetch implementation:
+
+```typescript
+const parser = new VASTParser({
+  fetchFn: async (url, options) => {
+    // Custom logic (e.g., add headers, proxy, retry)
+    return fetch(url, {
+      ...options,
+      headers: { 'X-Custom': 'header' }
+    });
+  }
+});
+```
+
+**Use Cases**:
+- Add custom headers
+- Proxy requests
+- Implement retry logic
+- Mock responses in tests
+
+## Example Usage
+
+### Basic Parsing
+
+```typescript
+import { VASTParser } from 'adgent-sdk';
+
+const parser = new VASTParser({
+  timeout: 8000,
+  debug: true
+});
+
+const result = await parser.parse('https://example.com/vast.xml');
+
+if (!result.success) {
+  console.error('VAST parse failed:', result.error);
+  return;
+}
+
+const ads = result.response.ads;
+console.log(`Parsed ${ads.length} ad(s)`);
+
+// Get first linear creative
+const linear = ads[0].creatives[0].linear;
+if (linear) {
+  console.log('Duration:', linear.duration);
+  console.log('Media files:', linear.mediaFiles.length);
+}
+```
+
+### Selecting Media File
+
+```typescript
+const result = await parser.parse('https://example.com/vast.xml');
+const linear = result.response.ads[0].creatives[0].linear;
+
+// Select best file for 1080p streaming
+const mediaFile = parser.selectBestMediaFile(
+  linear.mediaFiles,
+  2500 // 2.5 Mbps target
+);
+
+if (mediaFile) {
+  console.log('Selected media file:');
+  console.log('  URL:', mediaFile.url);
+  console.log('  Type:', mediaFile.type);
+  console.log('  Bitrate:', mediaFile.bitrate);
+  console.log('  Resolution:', `${mediaFile.width}x${mediaFile.height}`);
+}
+```
+
+### Aggregating Tracking Events
+
+```typescript
+import { VASTParser, AdTracker } from 'adgent-sdk';
+
+const parser = new VASTParser();
+const result = await parser.parse('https://example.com/vast.xml');
+
+if (result.success) {
+  // Get all tracking events
+  const events = parser.aggregateTrackingEvents(result.response.ads);
+  
+  // Get impression URLs
+  const impressions = parser.aggregateImpressions(result.response.ads);
+  
+  // Create tracker
+  const tracker = new AdTracker(events, { debug: true });
+  
+  // Fire impressions when playback starts
+  tracker.fireImpressions(impressions);
+  
+  // Fire tracking events
+  tracker.track('start');
+  tracker.track('firstQuartile');
+}
+```
+
+### Handling Wrappers
+
+```typescript
+const parser = new VASTParser({
+  maxWrapperDepth: 3,
+  debug: true
+});
+
+// Parser automatically resolves wrappers
+const result = await parser.parse('https://example.com/wrapper.xml');
+
+// The result contains merged tracking from all wrapper levels
+if (result.success) {
+  const ads = result.response.ads;
+  
+  // Check if ad came from wrapper
+  if (ads[0].wrapper) {
+    console.log('This was a wrapper ad');
+  }
+  
+  // Tracking events are already merged
+  const events = parser.aggregateTrackingEvents(ads);
+  console.log('Total events (including wrapper):', events.length);
+}
+```
+
+### Error Handling
+
+```typescript
+const parser = new VASTParser({ timeout: 5000 });
+
+try {
+  const result = await parser.parse('https://example.com/vast.xml');
+  
+  if (!result.success) {
+    console.error('VAST Error:', result.error.code, result.error.message);
+    
+    // Handle specific error codes
+    switch (result.error.code) {
+      case VASTErrorCode.WRAPPER_LIMIT_REACHED:
+        console.log('Too many wrapper redirects');
+        break;
+      case VASTErrorCode.NO_VAST_RESPONSE:
+        console.log('Empty VAST response');
+        break;
+      default:
+        console.log('Other error');
+    }
+    return;
+  }
+  
+  // Check for empty ads
+  if (result.response.ads.length === 0) {
+    console.log('No ads in VAST response');
+    return;
+  }
+  
+  // Success
+  console.log('VAST parsed successfully');
+} catch (error) {
+  console.error('Unexpected error:', error);
+}
+```
+
+## Platform Compatibility
+
+The parser handles platform-specific quirks:
+
+### AbortController Fallback
+
+Some Smart TV platforms (WebOS, Tizen, Vidaa) don't support `AbortController`. The parser falls back to a timeout promise race (src/core/VASTParser.ts:196):
+
+```typescript
+// Automatic fallback for platforms without AbortController
+const hasAbortController = typeof AbortController !== 'undefined';
+
+if (!hasAbortController) {
+  // Use Promise.race with timeout
+  response = await Promise.race([fetchPromise, timeoutPromise]);
+}
+```
+
+### VPAID Filtering
+
+The `selectBestMediaFile()` method explicitly blocks VPAID and JavaScript files to prevent performance issues and security risks on TV platforms:
+
+```typescript
+const validFiles = mediaFiles.filter(mf => 
+  mf.type.toLowerCase().startsWith('video/')
+);
+```
+
+## Related Types
+
+- [VASTResponse](/api/types/vast-response)
+- [Ad](/api/types/ad)
+- [MediaFile](/api/types/media-file)
+- [TrackingEvent](/api/types/tracking-event)
+- [VASTErrorCode](/api/types/vast-error-code)
+
+## See Also
+
+- [AdgentSDK](/api/adgent-sdk) - Main player class
+- [AdTracker](/api/ad-tracker) - Tracking pixel management
+- [PlatformAdapter](/api/platform-adapter) - Platform detection

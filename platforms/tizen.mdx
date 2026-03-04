@@ -1,0 +1,307 @@
+---
+title: 'Samsung Tizen'
+description: 'Smart TV platform adapter for Samsung Tizen TVs'
+---
+
+## Overview
+
+Samsung Tizen is the Smart TV platform used in Samsung televisions. The Adgent SDK provides native support for Tizen, including Samsung-specific remote control key codes, TV Player API integration, and advanced media key registration.
+
+## Supported Versions
+
+- **Tizen 4.0+**: Fully supported
+- **Recommended**: Tizen 5.0 or higher for optimal performance
+- **Tizen 3.0**: Limited support (some features unavailable)
+
+## Platform Detection
+
+The SDK automatically detects Tizen platforms using the following methods:
+
+- Global object `window.tizen` exists (highest priority)
+- User agent matches `/Tizen/i`
+- User agent matches `/SMART-TV.*Samsung/i`
+
+```typescript
+import { getPlatformAdapter, Platform } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.platform === Platform.Tizen) {
+  console.log('Running on Samsung Tizen');
+  console.log('Device info:', adapter.deviceInfo);
+}
+```
+
+## Platform-Specific Features
+
+### Tizen Key Registration
+
+**IMPORTANT**: Tizen apps must explicitly register media keys to receive remote control events. Call `registerTizenKeys()` during initialization:
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// Required for Tizen media key support
+adapter.registerTizenKeys();
+```
+
+This registers the following Tizen keys:
+- MediaPlay
+- MediaPause
+- MediaStop
+- MediaFastForward
+- MediaRewind
+- MediaPlayPause
+- ColorF0Red, ColorF1Green, ColorF2Yellow, ColorF3Blue
+- Info
+
+### HDR & Advanced Codecs
+
+Tizen TVs support advanced video capabilities:
+
+- **HDR**: Full HDR10 and HDR10+ support
+- **HEVC (H.265)**: Hardware decode support
+- **4K Resolution**: Up to 3840x2160
+- **Voice Control**: Bixby voice assistant integration
+
+### Hardware Decode Info
+
+Tizen provides hardware video decode information:
+
+```typescript
+if (adapter.capabilities.hardwareDecodeInfo) {
+  const settings = adapter.getRecommendedVideoSettings();
+  console.log('Max bitrate:', settings.maxBitrate); // 15000 kbps
+  console.log('Preferred codec:', settings.preferredCodec); // 'hevc'
+  console.log('Max resolution:', settings.maxResolution); // '4k'
+}
+```
+
+### Immersive Mode
+
+Tizen supports immersive video playback mode:
+
+```typescript
+const videoAttrs = adapter.getVideoAttributes();
+// Returns: { 'data-samsung-immersive': 'true', muted: true, playsinline: true, ... }
+```
+
+## Remote Control Key Codes
+
+Tizen uses platform-specific key codes for Samsung remote controls:
+
+| Key Action | Key Code | Description |
+|------------|----------|-------------|
+| Enter | 13 | OK/Select button |
+| **Back** | **10009** | Tizen-specific back button |
+| Left | 37 | Navigate left |
+| Up | 38 | Navigate up |
+| Right | 39 | Navigate right |
+| Down | 40 | Navigate down |
+| Play | 415 | Play media |
+| Pause | 19 | Pause media |
+| **PlayPause** | **10252** | Tizen play/pause toggle |
+| Stop | 413 | Stop playback |
+| Fast Forward | 417 | Skip forward |
+| Rewind | 412 | Skip backward |
+| Info | 457 | Information button |
+| Red | 403 | Red color button |
+| Green | 404 | Green color button |
+| Yellow | 405 | Yellow color button |
+| Blue | 406 | Blue color button |
+| Channel Up | 427 | Channel up |
+| Channel Down | 428 | Channel down |
+| Volume Up | 447 | Volume up |
+| Volume Down | 448 | Volume down |
+| Mute | 449 | Mute toggle |
+
+### Key Code Normalization
+
+```typescript
+import { getPlatformAdapter, KeyAction } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+// IMPORTANT: Register Tizen keys first
+adapter.registerTizenKeys();
+
+// Normalize platform-specific key code to action
+document.addEventListener('keydown', (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  if (action === KeyAction.Back) {
+    console.log('Back button pressed (key code 10009)');
+    // Handle back navigation
+  }
+  
+  if (action === KeyAction.PlayPause) {
+    console.log('Play/Pause toggle (key code 10252)');
+    // Handle playback toggle
+  }
+});
+
+// Get all key codes for a specific action
+const backKeyCodes = adapter.getKeyCodesForAction(KeyAction.Back);
+console.log('Back key codes:', backKeyCodes); // [10009]
+```
+
+## Device Information
+
+Access Tizen-specific device information using the Tizen System Info API:
+
+```typescript
+const adapter = getPlatformAdapter();
+const info = adapter.deviceInfo;
+
+console.log('Platform:', info.platform); // 'tizen'
+console.log('Manufacturer:', info.manufacturer); // 'Samsung'
+console.log('Model:', info.model); // e.g., 'QN55Q90A'
+console.log('Screen:', `${info.screenWidth}x${info.screenHeight}`);
+```
+
+## Code Example
+
+Complete example for Tizen platform:
+
+```typescript
+import { AdgentSDK, getPlatformAdapter, Platform, KeyAction } from 'adgent-sdk';
+
+// Initialize platform adapter
+const adapter = getPlatformAdapter();
+
+if (adapter.platform !== Platform.Tizen) {
+  console.warn('Not running on Tizen platform');
+}
+
+// CRITICAL: Register Tizen media keys
+adapter.registerTizenKeys();
+
+// Configure SDK with Tizen-optimized settings
+const sdk = new AdgentSDK({
+  container: document.getElementById('ad-container')!,
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: 15000, // High bitrate for Tizen HDR
+  mutedAutoplay: true,
+  onStart: () => {
+    console.log('Ad started on Tizen TV');
+  },
+  onComplete: () => {
+    console.log('Ad completed');
+  },
+  onError: (error) => {
+    console.error('Tizen ad error:', error);
+  }
+});
+
+// Handle Tizen remote control
+document.addEventListener('keydown', async (e) => {
+  const action = adapter.normalizeKeyCode(e.keyCode);
+  
+  switch (action) {
+    case KeyAction.Back:
+      // Tizen back button (10009)
+      e.preventDefault();
+      await sdk.stop();
+      break;
+      
+    case KeyAction.PlayPause:
+      // Tizen play/pause toggle (10252)
+      e.preventDefault();
+      const state = sdk.getState();
+      if (state.paused) {
+        await sdk.resume();
+      } else {
+        await sdk.pause();
+      }
+      break;
+      
+    case KeyAction.Enter:
+      // Handle ad click
+      e.preventDefault();
+      await sdk.skip();
+      break;
+      
+    case KeyAction.Red:
+    case KeyAction.Green:
+    case KeyAction.Yellow:
+    case KeyAction.Blue:
+      // Handle color buttons
+      console.log(`Color button: ${action}`);
+      break;
+  }
+});
+
+// Initialize and play
+await sdk.init();
+await sdk.play();
+```
+
+## Known Limitations
+
+### Key Registration Requirement
+
+- **CRITICAL**: Media keys (Play, Pause, Stop, etc.) will NOT work unless `registerTizenKeys()` is called
+- Must be called before any key event handlers are attached
+- Already-registered keys will silently fail (this is expected behavior)
+
+### Tizen 3.0 Restrictions
+
+- Limited HDR support (no HDR10+)
+- Voice control not available
+- Some system info APIs unavailable
+
+### Back Button Behavior
+
+- Tizen back button (10009) is different from standard web escape (27)
+- Always use `adapter.normalizeKeyCode()` instead of hardcoding key values
+- Prevent default behavior to avoid app termination: `e.preventDefault()`
+
+### Network Performance
+
+- Tizen WiFi performance varies significantly by model year
+- 2016-2018 models may struggle with bitrates > 8 Mbps
+- Always provide adaptive bitrate options
+
+### Memory Constraints
+
+- Tizen enforces strict memory limits for web apps
+- Call `sdk.destroy()` when disposing of ad player
+- Avoid creating multiple SDK instances simultaneously
+
+### Video Codec Support
+
+- HEVC support varies by chipset (2015-2016 models have limited support)
+- VP9 is not consistently supported across Tizen versions
+- Always provide H.264 fallback
+
+### External Links
+
+- Opening external links via `openExternalLink()` requires user confirmation
+- Some Tizen versions block external navigation entirely
+
+## Debugging
+
+Use console logging for Tizen debugging (no native toast notifications):
+
+```typescript
+const adapter = getPlatformAdapter();
+adapter.debug('Ad playback started on Tizen');
+```
+
+## Best Practices
+
+1. **Always Call `registerTizenKeys()`**: Required for media key support
+2. **Prevent Default on Back**: Use `e.preventDefault()` to control navigation
+3. **Test on Real Hardware**: Tizen emulator has significant differences from actual TVs
+4. **Handle Color Buttons**: Samsung remotes have 4 color buttons for app shortcuts
+5. **Use Immersive Mode**: Apply `data-samsung-immersive` attribute for fullscreen playback
+6. **Optimize for HEVC**: Tizen TVs have excellent HEVC hardware support
+7. **Clean Up Resources**: Always call `sdk.destroy()` to prevent memory leaks
+
+## See Also
+
+- [Platform Detection](/core/platform-adapter)
+- [Key Code Normalization](/guides/remote-control)
+- [Video Capabilities](/guides/video-optimization)

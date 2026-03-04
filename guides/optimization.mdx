@@ -1,0 +1,731 @@
+---
+title: Optimization
+description: Optimize Adgent SDK for bundle size, performance, and Smart TV constraints including memory and network limitations.
+---
+
+# Optimization
+
+Smart TV platforms have unique constraints compared to desktop browsers. This guide covers optimization strategies for bundle size, performance, and platform-specific limitations.
+
+## Bundle Size Optimization
+
+The SDK is designed to be lightweight with minimal dependencies.
+
+### Current Bundle Size
+
+From `README.md:405`:
+
+| Metric | Value |
+|--------|-------|
+| Gzipped Size | < 20 KB |
+| Minified Size | ~50 KB |
+| Dependencies | 1 (`fast-xml-parser`) |
+
+### Tree Shaking
+
+Use ES modules for optimal tree shaking:
+
+```typescript
+// Good: Import only what you need
+import { AdPlayer, getPlatformAdapter } from 'adgent-sdk';
+
+// Avoid: Importing entire module
+import * as Adgent from 'adgent-sdk';
+```
+
+**Build configuration** (Webpack/Vite):
+
+```javascript
+// webpack.config.js
+module.exports = {
+  optimization: {
+    usedExports: true,
+    sideEffects: false
+  },
+  resolve: {
+    mainFields: ['module', 'main']
+  }
+};
+```
+
+```javascript
+// vite.config.js
+export default {
+  build: {
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true // Remove console.logs in production
+      }
+    }
+  }
+};
+```
+
+### Lazy Loading
+
+Load the SDK only when needed:
+
+```typescript
+class VideoPlayer {
+  private adPlayer: any = null;
+  
+  async playPrerollAd(vastUrl: string) {
+    // Lazy load SDK only when ad is needed
+    if (!this.adPlayer) {
+      const { AdPlayer } = await import('adgent-sdk');
+      
+      this.adPlayer = new AdPlayer({
+        container: document.getElementById('ad-container'),
+        vastUrl
+      });
+      
+      await this.adPlayer.init();
+    }
+  }
+  
+  async playMainContent() {
+    // Main content doesn't load ad SDK
+    this.mainVideo.play();
+  }
+}
+```
+
+**Benefits**:
+- Reduces initial bundle size
+- Ad SDK only loaded when ads are served
+- Faster app startup
+
+### Code Splitting
+
+Split ad-related code into separate chunk:
+
+```typescript
+// routes/video.tsx
+import { lazy, Suspense } from 'react';
+
+// Lazy load ad player component
+const AdPlayerComponent = lazy(() => import('./components/AdPlayer'));
+
+function VideoPage() {
+  return (
+    <div>
+      <Suspense fallback={<div>Loading ad...</div>}>
+        <AdPlayerComponent vastUrl="https://example.com/vast.xml" />
+      </Suspense>
+      
+      <MainVideoPlayer />
+    </div>
+  );
+}
+```
+
+## Bitrate Selection Strategy
+
+Choosing the right bitrate is critical for TV performance.
+
+### Default Bitrate
+
+From `src/core/AdPlayer.ts:23`:
+
+```typescript
+const DEFAULT_CONFIG = {
+  targetBitrate: 2500, // ~1080p quality
+  // ...
+};
+```
+
+### Platform-Specific Recommendations
+
+From `src/core/PlatformAdapter.ts:357`:
+
+| Platform | Recommended Bitrate | Reason |
+|----------|---------------------|--------|
+| Tizen | 15000 kbps | High-end Samsung TVs handle it well |
+| WebOS | 15000 kbps | Modern LG TVs |
+| FireTV | 10000 kbps | Good performance |
+| Roku | 8000 kbps | Conservative (variable HEVC support) |
+| Xbox/PS | 20000 kbps | Game consoles have powerful hardware |
+| Generic | 5000 kbps | Safe default for web |
+
+### Adaptive Bitrate Selection
+
+```typescript
+import { AdPlayer, getPlatformAdapter } from 'adgent-sdk';
+
+function getOptimalBitrate(): number {
+  const adapter = getPlatformAdapter();
+  const settings = adapter.getRecommendedVideoSettings();
+  
+  let bitrate = settings.maxBitrate;
+  
+  // Adjust based on screen resolution
+  switch (adapter.capabilities.maxResolution) {
+    case '4k':
+      bitrate = Math.min(bitrate, 8000);
+      break;
+    case '1080p':
+      bitrate = Math.min(bitrate, 3500);
+      break;
+    case '720p':
+      bitrate = Math.min(bitrate, 2000);
+      break;
+  }
+  
+  // Further reduce for specific platforms
+  if (adapter.platform === 'roku') {
+    bitrate = Math.min(bitrate, 6000); // Roku struggles with high bitrates
+  }
+  
+  return bitrate;
+}
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: getOptimalBitrate()
+});
+```
+
+### Network-Aware Bitrate
+
+Adjust based on network conditions:
+
+```typescript
+async function getNetworkAwareBitrate(): Promise<number> {
+  const adapter = getPlatformAdapter();
+  let baseBitrate = adapter.getRecommendedVideoSettings().maxBitrate;
+  
+  // Check connection type (if available)
+  if ('connection' in navigator) {
+    const connection = (navigator as any).connection;
+    
+    if (connection.effectiveType === '4g') {
+      baseBitrate = Math.min(baseBitrate, 5000);
+    } else if (connection.effectiveType === '3g') {
+      baseBitrate = Math.min(baseBitrate, 2000);
+    } else if (connection.effectiveType === '2g') {
+      baseBitrate = Math.min(baseBitrate, 800);
+    }
+    
+    // Reduce for slow connections
+    if (connection.downlink && connection.downlink < 5) {
+      baseBitrate = Math.min(baseBitrate, 2000);
+    }
+  }
+  
+  return baseBitrate;
+}
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  targetBitrate: await getNetworkAwareBitrate()
+});
+```
+
+## VAST Caching
+
+Cache VAST responses to reduce network requests and improve performance.
+
+### In-Memory Cache
+
+```typescript
+class VASTCache {
+  private cache = new Map<string, { response: string; timestamp: number }>();
+  private ttl = 300000; // 5 minutes
+  
+  async getVAST(vastUrl: string): Promise<string> {
+    const cached = this.cache.get(vastUrl);
+    
+    if (cached && Date.now() - cached.timestamp < this.ttl) {
+      console.log('Using cached VAST');
+      return cached.response;
+    }
+    
+    // Fetch fresh VAST
+    const response = await fetch(vastUrl);
+    const vastXml = await response.text();
+    
+    // Cache it
+    this.cache.set(vastUrl, {
+      response: vastXml,
+      timestamp: Date.now()
+    });
+    
+    return vastXml;
+  }
+  
+  clear() {
+    this.cache.clear();
+  }
+}
+
+// Usage
+const vastCache = new VASTCache();
+
+async function playAd(vastUrl: string) {
+  // Get cached or fresh VAST
+  const vastXml = await vastCache.getVAST(vastUrl);
+  
+  // Convert to data URL to avoid re-fetch
+  const vastDataUrl = `data:text/xml;base64,${btoa(vastXml)}`;
+  
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl: vastDataUrl
+  });
+  
+  await player.init();
+}
+```
+
+### LocalStorage Cache
+
+For persistent caching across sessions:
+
+```typescript
+class PersistentVASTCache {
+  private storageKey = 'adgent_vast_cache';
+  private ttl = 3600000; // 1 hour
+  
+  async getVAST(vastUrl: string): Promise<string> {
+    try {
+      const cacheData = localStorage.getItem(this.storageKey);
+      
+      if (cacheData) {
+        const cache = JSON.parse(cacheData);
+        const entry = cache[vastUrl];
+        
+        if (entry && Date.now() - entry.timestamp < this.ttl) {
+          console.log('Using cached VAST from localStorage');
+          return entry.response;
+        }
+      }
+    } catch (e) {
+      console.warn('Cache read failed:', e);
+    }
+    
+    // Fetch fresh
+    const response = await fetch(vastUrl);
+    const vastXml = await response.text();
+    
+    // Save to cache
+    this.saveToCache(vastUrl, vastXml);
+    
+    return vastXml;
+  }
+  
+  private saveToCache(vastUrl: string, vastXml: string) {
+    try {
+      const cacheData = localStorage.getItem(this.storageKey);
+      const cache = cacheData ? JSON.parse(cacheData) : {};
+      
+      cache[vastUrl] = {
+        response: vastXml,
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(this.storageKey, JSON.stringify(cache));
+    } catch (e) {
+      console.warn('Cache write failed:', e);
+    }
+  }
+  
+  clear() {
+    localStorage.removeItem(this.storageKey);
+  }
+}
+```
+
+<Warning>Be mindful of localStorage size limits (typically 5-10MB). Clear old entries periodically.</Warning>
+
+## Performance Tips
+
+### 1. Minimize DOM Operations
+
+```typescript
+// Bad: Multiple DOM operations
+const container = document.getElementById('ad-container');
+container.style.position = 'relative';
+container.style.width = '100%';
+container.style.height = '100%';
+container.style.background = '#000';
+
+// Good: Single operation with cssText
+const container = document.getElementById('ad-container');
+container.style.cssText = '
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+';
+```
+
+### 2. Cleanup Resources
+
+Always destroy the player when done:
+
+```typescript
+const player = new AdPlayer({ /* config */ });
+
+await player.init();
+
+// ... ad plays ...
+
+// IMPORTANT: Cleanup
+player.destroy();
+```
+
+The `destroy()` method (`src/core/AdPlayer.ts:770`):
+- Removes event listeners
+- Cleans up video element
+- Removes UI elements
+- Clears tracking data
+
+### 3. Debounce Progress Updates
+
+```typescript
+function debounce(func: Function, wait: number) {
+  let timeout: NodeJS.Timeout;
+  return (...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // Debounce UI updates
+  onProgress: debounce((progress) => {
+    updateProgressBar(progress.percentage);
+  }, 100) // Update every 100ms instead of every frame
+});
+```
+
+### 4. Reduce Timeout Values
+
+From `README.md:417`:
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  timeout: 8000, // Faster timeout = faster failure recovery
+  maxWrapperDepth: 3 // Reduce wrapper depth for faster loads
+});
+```
+
+### 5. Disable Debug in Production
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  debug: process.env.NODE_ENV === 'development' // Only debug in dev
+});
+```
+
+Debug mode logs extensively which impacts performance.
+
+### 6. Use sendBeacon for Tracking
+
+```typescript
+import { getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+
+if (adapter.capabilities.sendBeacon) {
+  // Use sendBeacon - more efficient
+  navigator.sendBeacon(trackingUrl, data);
+} else {
+  // Fallback
+  fetch(trackingUrl, { method: 'POST', body: data, keepalive: true });
+}
+```
+
+## Smart TV Constraints
+
+### Memory Limitations
+
+Smart TVs typically have 512MB - 2GB RAM, much less than desktops.
+
+#### Problem: Memory Leaks
+
+```typescript
+// Bad: Creates memory leak
+const players: AdPlayer[] = [];
+
+function playAd(vastUrl: string) {
+  const player = new AdPlayer({ /* config */ });
+  players.push(player); // Never cleaned up!
+  await player.init();
+}
+```
+
+#### Solution: Proper Cleanup
+
+```typescript
+// Good: Single player instance, properly cleaned up
+class AdManager {
+  private currentPlayer: AdPlayer | null = null;
+  
+  async playAd(vastUrl: string) {
+    // Clean up previous player
+    if (this.currentPlayer) {
+      this.currentPlayer.destroy();
+      this.currentPlayer = null;
+    }
+    
+    // Create new player
+    this.currentPlayer = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl,
+      
+      onComplete: () => {
+        this.cleanup();
+      },
+      
+      onError: () => {
+        this.cleanup();
+      }
+    });
+    
+    await this.currentPlayer.init();
+  }
+  
+  cleanup() {
+    if (this.currentPlayer) {
+      this.currentPlayer.destroy();
+      this.currentPlayer = null;
+    }
+  }
+}
+```
+
+#### Video Element Limits
+
+```typescript
+// Limit number of video elements
+class VideoManager {
+  private static MAX_VIDEOS = 2; // Main + Ad
+  private videos: HTMLVideoElement[] = [];
+  
+  createVideo(): HTMLVideoElement {
+    // Remove excess videos
+    while (this.videos.length >= VideoManager.MAX_VIDEOS) {
+      const old = this.videos.shift();
+      if (old && old.parentNode) {
+        old.pause();
+        old.src = '';
+        old.load();
+        old.remove();
+      }
+    }
+    
+    const video = document.createElement('video');
+    this.videos.push(video);
+    return video;
+  }
+}
+```
+
+### Network Limitations
+
+TV WiFi chips are often slower than mobile/desktop.
+
+#### Optimize VAST Requests
+
+```typescript
+// Reduce wrapper depth to minimize network requests
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  maxWrapperDepth: 3, // Limit to 3 redirects
+  timeout: 12000 // Longer timeout for TV WiFi
+});
+```
+
+#### Prefetch VAST
+
+```typescript
+class VideoPlayer {
+  private vastCache: string | null = null;
+  
+  // Prefetch VAST before showing ad
+  async prefetchAd(vastUrl: string) {
+    try {
+      const response = await fetch(vastUrl);
+      this.vastCache = await response.text();
+      console.log('VAST prefetched');
+    } catch (e) {
+      console.error('Prefetch failed:', e);
+    }
+  }
+  
+  async playAd() {
+    const vastDataUrl = this.vastCache 
+      ? `data:text/xml;base64,${btoa(this.vastCache)}`
+      : 'https://example.com/vast.xml';
+    
+    const player = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl: vastDataUrl
+    });
+    
+    await player.init();
+  }
+}
+```
+
+#### Compression
+
+Ensure VAST responses are gzip compressed:
+
+```typescript
+// Server-side (Express example)
+app.get('/vast.xml', (req, res) => {
+  res.set('Content-Encoding', 'gzip');
+  res.set('Content-Type', 'text/xml');
+  res.send(gzippedVast);
+});
+```
+
+### CPU Constraints
+
+TV processors are slower than desktop CPUs.
+
+#### Avoid Heavy Computation
+
+```typescript
+// Bad: Heavy computation on every progress update
+player.on((event) => {
+  if (event.type === 'progress') {
+    // This runs every ~16ms!
+    const analytics = computeComplexAnalytics(event.data);
+    sendToServer(analytics);
+  }
+});
+
+// Good: Throttle heavy operations
+let lastAnalyticsTime = 0;
+
+player.on((event) => {
+  if (event.type === 'progress') {
+    const now = Date.now();
+    
+    // Send analytics every 5 seconds max
+    if (now - lastAnalyticsTime > 5000) {
+      lastAnalyticsTime = now;
+      const analytics = computeComplexAnalytics(event.data);
+      sendToServer(analytics);
+    }
+  }
+});
+```
+
+#### Use requestIdleCallback
+
+```typescript
+function scheduleBackgroundTask(task: () => void) {
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(task);
+  } else {
+    // Fallback for platforms without requestIdleCallback
+    setTimeout(task, 1);
+  }
+}
+
+player.on((event) => {
+  if (event.type === 'complete') {
+    // Schedule non-critical work for idle time
+    scheduleBackgroundTask(() => {
+      cleanupCache();
+      sendBatchedAnalytics();
+    });
+  }
+});
+```
+
+## Recommended Configuration
+
+Optimized configuration for Smart TV platforms:
+
+```typescript
+import { AdPlayer, getPlatformAdapter } from 'adgent-sdk';
+
+const adapter = getPlatformAdapter();
+const settings = adapter.getRecommendedVideoSettings();
+
+// Conservative bitrate for TVs
+const targetBitrate = Math.min(settings.maxBitrate, 3500);
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // Performance optimizations
+  targetBitrate,           // Platform-appropriate bitrate
+  maxWrapperDepth: 3,      // Limit redirects
+  timeout: 12000,          // Generous timeout for TV WiFi
+  debug: false,            // Disable debug in production
+  
+  // Lifecycle management
+  onComplete: () => {
+    player.destroy();      // Clean up immediately
+    resumeMainContent();
+  },
+  
+  onError: (error) => {
+    console.error(error);
+    player.destroy();      // Always clean up on error
+    resumeMainContent();
+  },
+  
+  onSkip: () => {
+    player.destroy();
+    resumeMainContent();
+  }
+});
+
+await player.init();
+```
+
+## Performance Checklist
+
+<Check>
+  - [ ] Use tree shaking and ES modules
+  - [ ] Lazy load SDK when ads are needed
+  - [ ] Set appropriate `targetBitrate` for platform
+  - [ ] Cache VAST responses (5-60 min TTL)
+  - [ ] Always call `destroy()` when done
+  - [ ] Disable debug mode in production
+  - [ ] Limit wrapper depth to 3-5
+  - [ ] Use generous timeouts (10-15 sec) for TVs
+  - [ ] Throttle progress updates and analytics
+  - [ ] Clean up video elements immediately
+  - [ ] Test on actual TV hardware
+  - [ ] Monitor memory usage over time
+</Check>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Learn about all configuration options
+  </Card>
+  
+  <Card title="Platform Detection" icon="tv" href="/guides/platform-detection">
+    Optimize for specific TV platforms
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors efficiently
+  </Card>
+  
+  <Card title="Event Handling" icon="bell" href="/guides/event-handling">
+    Optimize event handling
+  </Card>
+</CardGroup>

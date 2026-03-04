@@ -1,0 +1,786 @@
+---
+title: Error Handling
+description: Handle VAST errors, implement recovery strategies, and ensure graceful degradation for ad playback failures.
+---
+
+# Error Handling
+
+Robust error handling is critical for ad playback on Smart TV platforms. This guide covers VAST error codes, recovery strategies, and graceful degradation patterns.
+
+## Error Types
+
+The SDK uses standardized VAST error codes defined in `src/types/vast.ts:208`.
+
+### VASTErrorCode Enum
+
+```typescript
+enum VASTErrorCode {
+  // VAST parsing errors (100-199)
+  XML_PARSING_ERROR = 100,
+  VAST_SCHEMA_VALIDATION_ERROR = 101,
+  VAST_VERSION_NOT_SUPPORTED = 102,
+  
+  // Wrapper errors (300-399)
+  GENERAL_WRAPPER_ERROR = 300,
+  WRAPPER_TIMEOUT = 301,
+  WRAPPER_LIMIT_REACHED = 302,
+  NO_VAST_RESPONSE = 303,
+  
+  // Linear creative errors (400-499)
+  GENERAL_LINEAR_ERROR = 400,
+  FILE_NOT_FOUND = 401,
+  MEDIA_TIMEOUT = 402,
+  MEDIA_NOT_SUPPORTED = 403,
+  
+  // Companion ad errors (600-699)
+  GENERAL_COMPANION_ERROR = 600,
+  
+  // General errors (900+)
+  UNDEFINED_ERROR = 900
+}
+```
+
+### AdError Interface
+
+Error structure is defined at `src/types/player.ts:116`:
+
+```typescript
+interface AdError {
+  code: VASTErrorCode | number;  // Error code
+  message: string;                // Human-readable message
+  details?: string;               // Additional context
+  recoverable: boolean;           // Whether recovery is possible
+}
+```
+
+## Handling Errors
+
+### Using onError Callback
+
+The simplest way to handle errors:
+
+```typescript
+import { AdPlayer, VASTErrorCode } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  onError: (error) => {
+    console.error('Ad error:', error.code, error.message);
+    
+    // Check if recoverable
+    if (error.recoverable) {
+      console.log('Attempting recovery...');
+      // Implement recovery logic
+    } else {
+      console.log('Fatal error, skipping ad');
+      player.destroy();
+      resumeMainContent();
+    }
+  }
+});
+
+await player.init();
+```
+
+### Using Event Listeners
+
+For more complex error handling:
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml'
+});
+
+player.on((event) => {
+  if (event.type === 'error') {
+    const { code, message, recoverable } = event.data;
+    
+    // Log to analytics
+    analytics.track('ad_error', { code, message });
+    
+    // Handle based on error code
+    handleErrorByCode(code, recoverable);
+  }
+});
+```
+
+## Error Categories
+
+### VAST Parsing Errors (100-199)
+
+These occur during VAST XML parsing.
+
+#### XML_PARSING_ERROR (100)
+
+```typescript
+// Error: Invalid XML syntax
+// Cause: Malformed VAST response
+// Recovery: Not recoverable - skip ad
+
+if (error.code === VASTErrorCode.XML_PARSING_ERROR) {
+  console.error('Invalid VAST XML');
+  // Skip ad, resume content
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Common causes**:
+- Malformed XML from ad server
+- Network corruption
+- Invalid UTF-8 encoding
+
+**Recovery**: Not recoverable. Report error and skip ad.
+
+#### VAST_SCHEMA_VALIDATION_ERROR (101)
+
+```typescript
+// Error: VAST XML doesn't match schema
+// Cause: Missing required elements
+// Recovery: Not recoverable
+
+if (error.code === VASTErrorCode.VAST_SCHEMA_VALIDATION_ERROR) {
+  console.error('VAST schema validation failed');
+  analytics.track('vast_invalid_schema');
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Common causes**:
+- Missing `<Ad>` element
+- Missing `<Impression>` URLs
+- Invalid VAST structure
+
+**Recovery**: Not recoverable. Skip ad.
+
+#### VAST_VERSION_NOT_SUPPORTED (102)
+
+```typescript
+// Error: VAST version not supported
+// Cause: VAST 1.0 or unsupported version
+// Recovery: Not recoverable
+
+if (error.code === VASTErrorCode.VAST_VERSION_NOT_SUPPORTED) {
+  console.error('VAST version not supported');
+  // SDK supports VAST 4.x
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Recovery**: Not recoverable. SDK only supports VAST 4.x.
+
+### Wrapper Errors (300-399)
+
+These occur when following VAST wrappers.
+
+#### GENERAL_WRAPPER_ERROR (300)
+
+```typescript
+// Error: Generic wrapper processing error
+// Cause: Various wrapper issues
+// Recovery: Potentially recoverable
+
+if (error.code === VASTErrorCode.GENERAL_WRAPPER_ERROR) {
+  console.error('Wrapper error');
+  // Try fallback VAST URL if available
+  if (fallbackVastUrl) {
+    retryWithFallback(fallbackVastUrl);
+  } else {
+    player.destroy();
+    resumeMainContent();
+  }
+}
+```
+
+#### WRAPPER_TIMEOUT (301)
+
+```typescript
+// Error: Wrapper request timed out
+// Cause: Slow network or unresponsive ad server
+// Recovery: Retry with longer timeout
+
+if (error.code === VASTErrorCode.WRAPPER_TIMEOUT) {
+  console.error('Wrapper request timed out');
+  
+  if (retryCount < MAX_RETRIES) {
+    retryCount++;
+    
+    // Retry with longer timeout
+    const newPlayer = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl: vastUrl,
+      timeout: 20000 // Increase timeout
+    });
+    
+    await newPlayer.init();
+  } else {
+    player.destroy();
+    resumeMainContent();
+  }
+}
+```
+
+**Recovery strategy**:
+1. Retry with increased timeout (15-20 seconds)
+2. Max 2-3 retries
+3. If still fails, skip ad
+
+#### WRAPPER_LIMIT_REACHED (302)
+
+```typescript
+// Error: Too many wrapper redirects
+// Cause: Exceeded maxWrapperDepth
+// Recovery: Not recoverable (infinite redirect protection)
+
+if (error.code === VASTErrorCode.WRAPPER_LIMIT_REACHED) {
+  console.error('Wrapper depth limit reached');
+  // This is a protection mechanism - don't retry
+  analytics.track('wrapper_depth_exceeded');
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Cause**: More wrapper redirects than `maxWrapperDepth` (default: 5)
+
+**Recovery**: Not recoverable by design. Report to ad ops team.
+
+#### NO_VAST_RESPONSE (303)
+
+```typescript
+// Error: Empty or no VAST response
+// Cause: Ad server returned empty response
+// Recovery: Not recoverable
+
+if (error.code === VASTErrorCode.NO_VAST_RESPONSE) {
+  console.error('No VAST response received');
+  // Common with no-fill scenarios
+  analytics.track('no_vast_response');
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Common causes**:
+- No ad campaign available (no-fill)
+- Geographic restrictions
+- Frequency cap reached
+
+**Recovery**: Not recoverable. This is normal behavior when no ads are available.
+
+### Linear Creative Errors (400-499)
+
+These occur during video playback.
+
+#### GENERAL_LINEAR_ERROR (400)
+
+```typescript
+// Error: Generic linear ad error
+// Cause: Various playback issues
+// Recovery: Potentially recoverable
+
+if (error.code === VASTErrorCode.GENERAL_LINEAR_ERROR) {
+  console.error('Linear ad error:', error.details);
+  
+  // Check if it's an autoplay failure
+  if (error.message.includes('Playback failed')) {
+    // Show manual start overlay
+    // SDK handles this automatically
+  } else {
+    player.destroy();
+    resumeMainContent();
+  }
+}
+```
+
+**Implementation**: `src/core/AdPlayer.ts:398`
+
+#### FILE_NOT_FOUND (401)
+
+```typescript
+// Error: No suitable media file found
+// Cause: No compatible video format in VAST
+// Recovery: Not recoverable
+
+if (error.code === VASTErrorCode.FILE_NOT_FOUND) {
+  console.error('No suitable media file');
+  analytics.track('no_compatible_media');
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Common causes**:
+- VAST only has VPAID (not supported)
+- No MP4/WebM files available
+- All media files are unsupported codecs
+
+**Triggered at**: `src/core/AdPlayer.ts:129`
+
+**Recovery**: Not recoverable. Report to ad ops to add compatible media files.
+
+#### MEDIA_TIMEOUT (402)
+
+```typescript
+// Error: Media loading timed out
+// Cause: Slow CDN or network issues
+// Recovery: Retry once
+
+if (error.code === VASTErrorCode.MEDIA_TIMEOUT) {
+  console.error('Media loading timeout');
+  
+  if (retryCount === 0) {
+    retryCount++;
+    // Retry once
+    const newPlayer = new AdPlayer({ /* same config */ });
+    await newPlayer.init();
+  } else {
+    player.destroy();
+    resumeMainContent();
+  }
+}
+```
+
+**Recovery strategy**:
+1. Retry once after timeout
+2. If still fails, skip ad
+3. Log for CDN investigation
+
+#### MEDIA_NOT_SUPPORTED (403)
+
+```typescript
+// Error: Video codec/format not supported
+// Cause: Platform can't decode the video
+// Recovery: Not recoverable
+
+if (error.code === VASTErrorCode.MEDIA_NOT_SUPPORTED) {
+  console.error('Media format not supported');
+  const platform = getPlatformAdapter().platform;
+  analytics.track('unsupported_media', { platform });
+  player.destroy();
+  resumeMainContent();
+}
+```
+
+**Triggered at**: `src/core/AdPlayer.ts:220`
+
+**Common causes**:
+- HEVC video on platform without HEVC support
+- Corrupt video file
+- DRM-protected content
+
+**Recovery**: Not recoverable. Report to ad ops with platform details.
+
+## Recovery Strategies
+
+### Strategy 1: Automatic Retry
+
+```typescript
+import { AdPlayer, VASTErrorCode } from 'adgent-sdk';
+
+class AdManager {
+  private retryCount = 0;
+  private maxRetries = 2;
+  
+  async playAd(vastUrl: string) {
+    const player = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl,
+      
+      onError: async (error) => {
+        console.error('Ad error:', error);
+        
+        // Retry on specific errors
+        const retryableCodes = [
+          VASTErrorCode.WRAPPER_TIMEOUT,
+          VASTErrorCode.MEDIA_TIMEOUT,
+          VASTErrorCode.GENERAL_WRAPPER_ERROR
+        ];
+        
+        if (retryableCodes.includes(error.code as VASTErrorCode) && 
+            this.retryCount < this.maxRetries) {
+          this.retryCount++;
+          console.log(`Retrying... (${this.retryCount}/${this.maxRetries})`);
+          
+          player.destroy();
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Retry
+          await this.playAd(vastUrl);
+        } else {
+          // Give up
+          console.log('Max retries reached or non-retryable error');
+          player.destroy();
+          this.resumeMainContent();
+        }
+      },
+      
+      onComplete: () => {
+        this.retryCount = 0; // Reset on success
+        player.destroy();
+        this.resumeMainContent();
+      }
+    });
+    
+    await player.init();
+  }
+  
+  private resumeMainContent() {
+    // Resume main video
+  }
+}
+```
+
+### Strategy 2: Fallback VAST URL
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+class AdManager {
+  async playAd(primaryVastUrl: string, fallbackVastUrl?: string) {
+    const player = new AdPlayer({
+      container: document.getElementById('ad-container'),
+      vastUrl: primaryVastUrl,
+      
+      onError: async (error) => {
+        console.error('Primary VAST failed:', error);
+        
+        if (fallbackVastUrl) {
+          console.log('Trying fallback VAST...');
+          player.destroy();
+          
+          // Try fallback
+          await this.playAd(fallbackVastUrl);
+        } else {
+          // No fallback available
+          player.destroy();
+          this.resumeMainContent();
+        }
+      },
+      
+      onComplete: () => {
+        player.destroy();
+        this.resumeMainContent();
+      }
+    });
+    
+    await player.init();
+  }
+  
+  private resumeMainContent() {
+    // Resume main video
+  }
+}
+```
+
+### Strategy 3: Adaptive Timeout
+
+```typescript
+import { AdPlayer, getPlatformAdapter } from 'adgent-sdk';
+
+function getAdaptiveTimeout(): number {
+  const adapter = getPlatformAdapter();
+  
+  // Adjust timeout based on platform
+  switch (adapter.platform) {
+    case 'webos':
+      return 15000; // LG TVs often slower
+    case 'tizen':
+      return 12000; // Samsung TVs moderate
+    default:
+      return 10000; // Default
+  }
+}
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  timeout: getAdaptiveTimeout()
+});
+```
+
+### Strategy 4: Error Tracking & Analytics
+
+```typescript
+import { AdPlayer, VASTErrorCode } from 'adgent-sdk';
+
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  onError: (error) => {
+    // Track all errors
+    analytics.track('ad_error', {
+      code: error.code,
+      message: error.message,
+      vastUrl: 'https://example.com/vast.xml',
+      platform: getPlatformAdapter().platform,
+      timestamp: Date.now()
+    });
+    
+    // Fire VAST error pixels
+    fireVastErrorPixel(error.code);
+    
+    // Graceful degradation
+    player.destroy();
+    resumeMainContent();
+  }
+});
+
+function fireVastErrorPixel(errorCode: number) {
+  // VAST error tracking URL with [ERRORCODE] macro
+  const errorUrl = `https://adserver.com/error?code=${errorCode}`;
+  
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(errorUrl);
+  } else {
+    const img = new Image();
+    img.src = errorUrl;
+  }
+}
+```
+
+## Common Error Scenarios
+
+### Scenario 1: Autoplay Blocked
+
+**Error**: `GENERAL_LINEAR_ERROR` with message "Playback failed"
+
+**Cause**: Browser/platform blocking autoplay
+
+**SDK Behavior**: Automatically shows "Start Ad" overlay
+
+**User Action Required**: Click play button
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  // SDK handles this automatically with overlay
+  // No special error handling needed
+  
+  onStart: () => {
+    console.log('Ad started after user interaction');
+  }
+});
+```
+
+**Implementation**: `src/core/AdPlayer.ts:270-282`
+
+### Scenario 2: Network Timeout
+
+**Error**: `WRAPPER_TIMEOUT` or `MEDIA_TIMEOUT`
+
+**Cause**: Slow network or unresponsive server
+
+**Recovery**: Retry with longer timeout
+
+```typescript
+let timeoutDuration = 10000;
+let retryCount = 0;
+
+async function playWithRetry(vastUrl: string) {
+  const player = new AdPlayer({
+    container: document.getElementById('ad-container'),
+    vastUrl,
+    timeout: timeoutDuration,
+    
+    onError: async (error) => {
+      if ((error.code === VASTErrorCode.WRAPPER_TIMEOUT ||
+           error.code === VASTErrorCode.MEDIA_TIMEOUT) &&
+          retryCount < 2) {
+        retryCount++;
+        timeoutDuration += 5000; // Increase by 5 seconds
+        
+        console.log(`Timeout, retrying with ${timeoutDuration}ms timeout`);
+        player.destroy();
+        await playWithRetry(vastUrl);
+      } else {
+        player.destroy();
+        resumeMainContent();
+      }
+    }
+  });
+  
+  await player.init();
+}
+```
+
+### Scenario 3: No Compatible Media
+
+**Error**: `FILE_NOT_FOUND`
+
+**Cause**: No suitable video format in VAST
+
+**Recovery**: Not recoverable - report to ad ops
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  onError: (error) => {
+    if (error.code === VASTErrorCode.FILE_NOT_FOUND) {
+      // Report to ad ops
+      analytics.track('no_compatible_media', {
+        vastUrl: 'https://example.com/vast.xml',
+        platform: getPlatformAdapter().platform,
+        capabilities: getPlatformAdapter().capabilities
+      });
+      
+      // Skip ad
+      player.destroy();
+      resumeMainContent();
+    }
+  }
+});
+```
+
+### Scenario 4: Empty VAST Response
+
+**Error**: `NO_VAST_RESPONSE`
+
+**Cause**: No ad available (no-fill)
+
+**Recovery**: Normal behavior - resume content
+
+```typescript
+const player = new AdPlayer({
+  container: document.getElementById('ad-container'),
+  vastUrl: 'https://example.com/vast.xml',
+  
+  onError: (error) => {
+    if (error.code === VASTErrorCode.NO_VAST_RESPONSE) {
+      // This is normal - no ad to show
+      console.log('No ad available');
+      
+      // Track no-fill
+      analytics.track('ad_no_fill');
+      
+      // Resume content immediately
+      player.destroy();
+      resumeMainContent();
+    }
+  }
+});
+```
+
+## Graceful Degradation
+
+Always ensure the user experience continues even when ads fail.
+
+### Best Practice Pattern
+
+```typescript
+import { AdPlayer } from 'adgent-sdk';
+
+class VideoPlayer {
+  private adPlayer: AdPlayer | null = null;
+  private mainVideo: HTMLVideoElement;
+  
+  constructor(mainVideo: HTMLVideoElement) {
+    this.mainVideo = mainVideo;
+  }
+  
+  async playPrerollAd(vastUrl: string) {
+    try {
+      this.adPlayer = new AdPlayer({
+        container: document.getElementById('ad-container'),
+        vastUrl,
+        timeout: 12000,
+        
+        onComplete: () => {
+          console.log('Ad completed successfully');
+          this.cleanupAd();
+          this.startMainContent();
+        },
+        
+        onSkip: () => {
+          console.log('User skipped ad');
+          this.cleanupAd();
+          this.startMainContent();
+        },
+        
+        onError: (error) => {
+          // Log error
+          console.error('Ad error:', error);
+          analytics.track('ad_error', error);
+          
+          // CRITICAL: Always resume content on error
+          this.cleanupAd();
+          this.startMainContent();
+        },
+        
+        onClose: () => {
+          console.log('User closed ad');
+          this.cleanupAd();
+          this.startMainContent();
+        }
+      });
+      
+      await this.adPlayer.init();
+      
+    } catch (error) {
+      // Catch any initialization errors
+      console.error('Ad initialization failed:', error);
+      this.cleanupAd();
+      this.startMainContent();
+    }
+  }
+  
+  private cleanupAd() {
+    if (this.adPlayer) {
+      this.adPlayer.destroy();
+      this.adPlayer = null;
+    }
+  }
+  
+  private startMainContent() {
+    // Always start main content
+    this.mainVideo.play();
+  }
+}
+```
+
+### Error Handling Checklist
+
+<Check>
+  - [ ] **Always** resume main content on ad error
+  - [ ] **Never** block user from watching content due to ad failure
+  - [ ] **Log** all errors to analytics for debugging
+  - [ ] **Fire** VAST error tracking pixels
+  - [ ] **Clean up** player resources with `destroy()`
+  - [ ] **Implement** retry logic for transient errors only
+  - [ ] **Set** reasonable timeout values (10-15 seconds)
+  - [ ] **Test** error scenarios on actual TV hardware
+</Check>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure timeouts and error-related settings
+  </Card>
+  
+  <Card title="Event Handling" icon="bell" href="/guides/event-handling">
+    Handle error events with listeners
+  </Card>
+  
+  <Card title="Platform Detection" icon="tv" href="/guides/platform-detection">
+    Handle platform-specific errors
+  </Card>
+  
+  <Card title="Optimization" icon="gauge-high" href="/guides/optimization">
+    Prevent errors through optimization
+  </Card>
+</CardGroup>
