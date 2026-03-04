@@ -1,0 +1,123 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Adgent SDK",
+  "projectDescription": "Lightweight, framework-agnostic VAST Player SDK for Smart TV platforms",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/vast-compliance",
+              "concepts/platform-support",
+              "concepts/nuclear-mute-strategy"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/configuration",
+              "guides/event-handling",
+              "guides/platform-detection",
+              "guides/error-handling",
+              "guides/optimization"
+            ]
+          },
+          {
+            "group": "Smart TV Platforms",
+            "pages": [
+              "platforms/webos",
+              "platforms/tizen",
+              "platforms/vidaa",
+              "platforms/whaleos",
+              "platforms/other"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/adgent-sdk",
+              "api/ad-player",
+              "api/vast-parser",
+              "api/ad-tracker",
+              "api/platform-adapter"
+            ]
+          },
+          {
+            "group": "Type Definitions",
+            "pages": [
+              "api/types/player",
+              "api/types/vast",
+              "api/types/platform"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/macros"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Additional Resources",
+            "pages": [
+              "resources/limitations",
+              "resources/performance",
+              "resources/examples",
+              "resources/changelog",
+              "resources/migration"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "VAST 4.x compliant ad parsing with full wrapper resolution",
+    "Multi-platform support for WebOS, Tizen, Vidaa, and WhaleOS",
+    "Nuclear Mute autoplay strategy with soft-fail recovery",
+    "Remote control key normalization and focus management",
+    "Comprehensive event system for ad lifecycle tracking",
+    "Intelligent media file selection optimized for Smart TV hardware"
+  ],
+  "publicApiSurface": [
+    "AdgentSDK (main class)",
+    "AdPlayer (core player)",
+    "VASTParser (VAST XML parser)",
+    "AdTracker (tracking pixel manager)",
+    "PlatformAdapter (platform detection)",
+    "getPlatformAdapter (helper function)",
+    "replaceMacros (macro replacement utility)",
+    "AdPlayerConfig (configuration interface)",
+    "AdPlayerState (state interface)",
+    "AdPlayerEvent (event types)",
+    "VASTResponse (VAST types)",
+    "Platform (platform enum)",
+    "KeyAction (remote key enum)",
+    "PlaybackStatus (playback state enum)",
+    "VASTErrorCode (error codes)"
+  ]
+}
