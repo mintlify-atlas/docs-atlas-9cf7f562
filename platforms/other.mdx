@@ -289,7 +289,6 @@ const sdk = new AdgentSDK({
   container: document.getElementById('ad-container')!,
   vastUrl: 'https://example.com/vast.xml',
   targetBitrate: settings.maxBitrate,
-  mutedAutoplay: true,
   onStart: () => console.log('Ad started'),
   onComplete: () => console.log('Ad completed'),
   onError: (error) => console.error('Ad error:', error)
@@ -320,7 +319,6 @@ document.addEventListener('keydown', async (e) => {
 });
 
 await sdk.init();
-await sdk.play();
 ```
 
 ## Known Limitations

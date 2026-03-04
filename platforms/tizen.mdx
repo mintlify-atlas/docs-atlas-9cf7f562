@@ -183,7 +183,6 @@ const sdk = new AdgentSDK({
   container: document.getElementById('ad-container')!,
   vastUrl: 'https://example.com/vast.xml',
   targetBitrate: 15000, // High bitrate for Tizen HDR
-  mutedAutoplay: true,
   onStart: () => {
     console.log('Ad started on Tizen TV');
   },
@@ -235,7 +234,6 @@ document.addEventListener('keydown', async (e) => {
 
 // Initialize and play
 await sdk.init();
-await sdk.play();
 ```
 
 ## Known Limitations

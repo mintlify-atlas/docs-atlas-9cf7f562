@@ -23,7 +23,6 @@ const sdk = new AdgentSDK({
 });
 
 await sdk.init();
-await sdk.play();
 ```
 
 ## Pre-Roll Ad Integration
@@ -159,7 +158,6 @@ class MidRollManager {
 
     try {
       await sdk.init();
-      await sdk.play();
     } catch (error) {
       console.error('Mid-roll failed:', error);
       this.resumeContent(resumeTime, sdk);
@@ -293,7 +291,6 @@ const sdk = new AdgentSDK({
 const analytics = new AdAnalytics(sdk, 'ad-12345');
 
 await sdk.init();
-await sdk.play();
 ```
 
 ## Platform-Specific Configuration
@@ -367,7 +364,6 @@ const sdk = createPlatformOptimizedSDK(
 );
 
 await sdk.init();
-await sdk.play();
 ```
 
 ## Error Handling with Retry
@@ -399,7 +395,6 @@ class ResilientAdPlayer {
         });
 
         await sdk.init();
-        await sdk.play();
 
         // Success! Wait for completion
         return new Promise<void>((resolve, reject) => {
@@ -544,7 +539,6 @@ const sdk = new AdgentSDK({
 const remoteControl = new RemoteControlledAd(sdk);
 
 await sdk.init();
-await sdk.play();
 
 // Cleanup when done
 sdk.on((event) => {
@@ -607,7 +601,6 @@ async function playPreRoll() {
 
   try {
     await sdk.init();
-    await sdk.play();
   } catch (error) {
     console.error('Failed to play ad:', error);
     onAdFinished();

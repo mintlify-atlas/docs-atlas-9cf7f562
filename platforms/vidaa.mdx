@@ -142,7 +142,6 @@ const sdk = new AdgentSDK({
   container: document.getElementById('ad-container')!,
   vastUrl: 'https://example.com/vast.xml',
   targetBitrate: 2500, // Conservative for Vidaa hardware
-  mutedAutoplay: true,
   timeout: 8000, // Slightly longer timeout for slower network
   onStart: () => {
     console.log('Ad started on Vidaa TV');
@@ -183,7 +182,6 @@ document.addEventListener('keydown', async (e) => {
 
 // Initialize and play
 await sdk.init();
-await sdk.play();
 ```
 
 ## Known Limitations
@@ -239,7 +237,6 @@ const sdk = new AdgentSDK({
   targetBitrate: 1500,      // Low bitrate for stability
   timeout: 10000,            // Longer timeout for slower network
   maxWrapperDepth: 3,        // Reduce wrapper chain depth
-  mutedAutoplay: true,       // Required for autoplay
   
   onError: (error) => {
     // Always implement graceful fallback on Vidaa
